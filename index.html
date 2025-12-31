@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <!-- 关键修改：viewport-fit=cover 适配刘海屏，禁止缩放 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>猜疑链：黑暗森林 (终极适配版)</title>
+    <style>
+        :root {
+            /* 定义颜色变量 */
+            --color-primary: #00e676;
+            --color-danger: #ff5252;
+            --color-bg-overlay: rgba(0, 0, 0, 0.95);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #0b0f0b;
+            overflow: hidden; /* 禁止 body 滚动 */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #ccc;
+            user-select: none;
+            -webkit-user-select: none;
+            /* 关键：禁止全局默认触摸行为（防止拖动游戏画布），但允许特定区域覆盖此设置 */
+            touch-action: none; 
+            width: 100vw;
+            height: 100vh;
+            /* 适配安全区域 */
+            padding-left: env(safe-area-inset-left);
+            padding-right: env(safe-area-inset-right);
+            box-sizing: border-box;
+        }
+        
+        canvas { display: block; }
+
+        /* 通用滚动条样式 (Webkit) */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.3); border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.5); }
+
+        /* 横屏强制提示 */
+        #landscape-lock {
+            display: none;
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: #000; z-index: 9999;
+            flex-direction: column; align-items: center; justify-content: center;
+            color: #fff; text-align: center;
+        }
+        #landscape-lock svg { width: 64px; height: 64px; margin-bottom: 20px; fill: #fff; animation: rotate-phone 2s infinite; }
+        @keyframes rotate-phone { 0%, 10% { transform: rotate(0deg); } 40%, 60% { transform: rotate(-90deg); } 90%, 100% { transform: rotate(0deg); } }
+        
+        /* 竖屏且宽度小于高度时显示提示 */
+        @media screen and (orientation: portrait) {
+            #landscape-lock { display: flex; }
+        }
+
+        #ui-layer {
+            position: absolute; top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            display: flex; flex-direction: column; justify-content: space-between;
+            z-index: 10;
+        }
+
+        /* 顶部 HUD */
+        #top-hud {
+            width: 100%; display: flex; flex-direction: column; align-items: center;
+            padding-top: max(10px, env(safe-area-inset-top)); /* 适配顶部刘海 */
+            pointer-events: none;
+        }
+
+        /* 设置按钮 */
+        #settings-btn {
+            position: absolute; top: max(15px, env(safe-area-inset-top)); right: max(15px, env(safe-area-inset-right));
+            width: 44px; height: 44px;
+            background: rgba(0,0,0,0.5);
+            border: 2px solid #fff; border-radius: 50%;
+            color: #fff; font-size: 22px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; pointer-events: auto; z-index: 80;
+            transition: all 0.3s;
+        }
+        #settings-btn:hover { background: #fff; color: #000; transform: rotate(90deg); }
+
+        /* 核心计时器 */
+        #peace-timer {
+            position: absolute; top: 15%; left: 50%; transform: translate(-50%, -50%);
+            font-size: clamp(16px, 4vw, 24px); /* 响应式字体 */
+            color: #4caf50; font-weight: bold;
+            text-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
+            background-color: rgba(0,0,0,0.6);
+            padding: 5px 15px; border-radius: 20px; border: 1px solid #4caf50;
+            transition: opacity 0.5s; z-index: 50; white-space: nowrap;
+        }
+
+        #tutorial-instruction {
+            font-size: clamp(14px, 3.5vw, 20px);
+            color: #ffffff; font-weight: bold;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            margin-top: 10px; background-color: rgba(0,0,0,0.8);
+            padding: 10px 15px; border-radius: 5px; border-left: 4px solid #4caf50;
+            transition: all 0.3s; display: none; text-align: center; white-space: pre-wrap; /* 允许换行 */
+            max-width: 80%;
+        }
+        .instruction-complete { color: var(--color-primary) !important; border-color: var(--color-primary) !important; transform: scale(1.05); }
+
+        @keyframes fireAllowedPop {
+            0% { transform: translate(-50%, -50%) scale(1); opacity: 1; color: var(--color-danger); border-color: var(--color-danger); text-shadow: none; }
+            70% { transform: translate(-50%, -50%) scale(1); opacity: 1; color: var(--color-danger); }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 0; color: var(--color-danger); }
+        }
+        .fire-allowed-anim { animation: fireAllowedPop 2s forwards; }
+
+        #enemy-status-bar {
+            display: flex; gap: 4px; background: rgba(0, 0, 0, 0.4);
+            padding: 6px; border-radius: 20px; border: 1px solid #333;
+            flex-wrap: wrap; justify-content: center; max-width: 90%; margin-top: 5px;
+        }
+        .status-icon {
+            width: 12px; height: 12px; border-radius: 50%; border: 1px solid #555;
+            position: relative; transition: all 0.3s;
+        }
+        .status-icon.dead::after {
+            content: '×'; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); color: #ff1744; font-size: 16px; font-weight: bold; text-shadow: 1px 1px 0 #000;
+        }
+        .status-icon.dead { opacity: 0.5; border-color: #333; }
+
+        .score-board {
+            position: absolute; top: max(15px, env(safe-area-inset-top)); left: max(15px, env(safe-area-inset-left));
+            font-size: clamp(14px, 3.5vw, 20px); font-weight: bold; color: #e0e0e0; text-shadow: 2px 2px 0px #000;
+        }
+
+        /* 状态面板 */
+        .status-panel {
+            position: fixed; top: max(60px, calc(env(safe-area-inset-top) + 40px)); left: max(15px, env(safe-area-inset-left));
+            display: flex; flex-direction: column; gap: 5px; z-index: 5;
+            transform-origin: top left;
+        }
+        .health-bar-container {
+            width: 160px; height: 14px; background: rgba(0, 0, 0, 0.5); border: 2px solid #555;
+            display: flex; gap: 2px; padding: 2px; transition: width 0.3s;
+        }
+        .health-segment { flex: 1; background-color: #550000; transition: background-color 0.2s; }
+        .health-segment.active { background-color: #2e7d32; }
+
+        .ammo-display {
+            font-size: 16px; color: #ffd54f; text-shadow: 1px 1px 0 #000;
+            display: flex; align-items: center; gap: 6px;
+        }
+        .ammo-icon { width: 9px; height: 14px; background: #ffd54f; display: inline-block; border: 1px solid #bcaaa4; }
+        .ammo-regen-bar { height: 3px; background: #ffd54f; width: 0%; margin-top: 2px; transition: width 0.1s linear; }
+        .reload-text { font-size: 12px; color: #bdbdbd; margin-left: 5px; opacity: 0; transition: opacity 0.2s; font-weight: normal; }
+        .reload-text.visible { opacity: 1; animation: pulse-text 1.5s infinite; }
+        @keyframes pulse-text { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
+
+        /* === 广播系统样式 === */
+        #game-broadcast {
+            position: absolute;
+            top: 15%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 90%;
+            text-align: center;
+            font-size: clamp(18px, 5vw, 32px);
+            font-weight: bold;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(0, 230, 118, 0.4);
+            pointer-events: none;
+            opacity: 0;
+            z-index: 80;
+            transition: opacity 0.5s ease-in-out;
+            font-family: "SimSun", "Songti SC", serif; /* 使用衬线体更有史诗感 */
+            letter-spacing: 2px;
+        }
+        #game-broadcast.active {
+            opacity: 1;
+            animation: broadcast-pulse 4s forwards;
+        }
+        @keyframes broadcast-pulse {
+            0% { transform: translate(-50%, -60%); opacity: 0; }
+            10% { transform: translate(-50%, -50%); opacity: 1; }
+            90% { transform: translate(-50%, -50%); opacity: 1; }
+            100% { transform: translate(-50%, -40%); opacity: 0; }
+        }
+
+        #cosmic-echo-banner {
+            position:absolute; left:50%; top:40%; transform:translate(-50%,-50%);
+            font-size:8vw; font-weight:900; color:#e0f7fa; letter-spacing:4px;
+            text-shadow:0 0 16px rgba(0,255,255,0.7); opacity:0; transition:opacity 0.4s ease;
+            pointer-events:none; z-index:15; text-align: center; width: 100%;
+        }
+        #cosmic-echo-banner.show { opacity:1; }
+
+        /* === 菜单与页面容器 === */
+        #menu-overlay, #pause-menu {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--color-bg-overlay);
+            z-index: 100; text-align: center;
+            overflow-y: auto; touch-action: pan-y; -webkit-overflow-scrolling: touch;
+            display: flex; flex-direction: column; align-items: center; 
+            padding-top: max(20px, env(safe-area-inset-top));
+            padding-bottom: max(20px, env(safe-area-inset-bottom));
+            box-sizing: border-box;
+        }
+        #pause-menu { background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); z-index: 90; display: none; justify-content: center; }
+        
+        .page-container {
+            margin: auto; width: 100%;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            padding: 20px 0;
+        }
+
+        .main-title { font-size: clamp(40px, 10vh, 80px); margin: 0; color: #ffffff; letter-spacing: 5px; text-shadow: 0 0 20px rgba(255, 255, 255, 0.4); z-index: 10; position: relative; }
+        .sub-title { font-size: clamp(16px, 4vh, 24px); margin: 5px 0 20px 0; color: #b0bec5; letter-spacing: 3px; text-transform: uppercase; border-top: 1px solid #b0bec5; padding-top: 10px; width: 60%; z-index: 10; position: relative; }
+
+        .visual-container { position:absolute; top:0; left:0; width:100%; height:100%; pointer-events:none; z-index:-1; overflow:hidden; }
+        .wave-group-white { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 60vmin; height: 60vmin; }
+        .wave-circle-white { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); border:2px solid rgba(255,255,255,0.8); border-radius:50%; width:100%; height:100%; box-shadow:0 0 20px rgba(255,255,255,0.3); opacity:0; animation:wave-expand-white 6s infinite linear; }
+        .wave-circle-white:nth-child(1){animation-delay:0s;} .wave-circle-white:nth-child(2){animation-delay:1.5s;}
+        .wave-circle-white:nth-child(3){animation-delay:3s;} .wave-circle-white:nth-child(4){animation-delay:4.5s;}
+        @keyframes wave-expand-white{0%{width:0;height:0;opacity:1;border-width:4px;}100%{width:100%;height:100%;opacity:0;border-width:0px;}}
+        .wave-group-red { position:absolute; top:60%; left:80%; width:100px; height:100px; transform:translate(-50%,-50%); opacity: 0.6; }
+        .wave-circle-red { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); border:4px solid #ff5252; border-radius:50%; width:100%; height:100%; opacity:0; animation:wave-expand-red 2s infinite ease-out; }
+        .wave-circle-red:nth-child(2){animation-delay:.5s;}
+        .red-core { position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:8px; height:8px; background:#ff5252; border-radius:50%; box-shadow:0 0 10px #ff5252; }
+        @keyframes wave-expand-red{0%{width:0;height:0;opacity:.8;border-width:4px;}100%{width:100%;height:100%;opacity:0;border-width:0px;}}
+
+        .info-text, .controls-info {
+            font-size: clamp(14px, 3.5vw, 18px); color:#fff; margin-bottom:20px; 
+            text-shadow:0 0 5px rgba(0,0,0,0.8); z-index:10; position:relative;
+            max-width: 90%; max-height: 40vh; overflow-y: auto; padding: 0 10px; touch-action: pan-y;
+        }
+        .controls-info { color:#e0e0e0; border:1px solid #fff; padding: 15px 20px; background:rgba(255,255,255,0.05); }
+
+        .tutorial-locked{display:none!important;} .tutorial-prompt{font-size:16px;color:#b0bec5;margin-bottom:15px;display:none;}
+        .tutorial-highlight{border-color:var(--color-primary)!important;color:var(--color-primary)!important;box-shadow:0 0 30px rgba(105,240,174,.6)!important;transform:scale(1.1);animation:pulse-green 2s infinite;}
+        @keyframes pulse-green{0%{box-shadow:0 0 20px rgba(105,240,174,.4);}50%{box-shadow:0 0 40px rgba(105,240,174,.8);}100%{box-shadow:0 0 20px rgba(105,240,174,.4);}}
+        .highlight-key{color:#fff;font-weight:bold;border:1px solid #fff;padding:2px 6px;border-radius:4px;margin:0 3px;background:rgba(255,255,255,.1);}
+        .blood-warning{color:var(--color-danger);font-weight:bold;font-size:clamp(16px, 4vw, 22px);text-shadow:0 0 15px rgba(255,23,68,.6);margin-top:20px;animation:pulse 2s infinite;}
+        @keyframes pulse{0%{opacity:.8;}50%{opacity:1;}100%{opacity:.8;}}
+        
+        .easter-egg-area { margin-top:10px; display:flex; flex-direction:row; align-items:center; justify-content: center; gap:15px; padding:10px; border-top:1px solid rgba(255,255,255,.1); z-index:10; position:relative; width: 90%; max-width: 400px; }
+        .three-body-visual { position:relative; width:40px; height:40px; animation:rotate-system 10s infinite linear; flex-shrink: 0; }
+        .tb-sun { position:absolute; border-radius:50%; box-shadow:0 0 10px rgba(255,255,255,.5); }
+        .tb-1{width:6px;height:6px;background:#ff9800;top:5px;left:18px;animation:orbit-1 3s infinite ease-in-out;}
+        .tb-2{width:5px;height:5px;background:#ff5722;top:30px;left:30px;animation:orbit-2 4s infinite ease-in-out;}
+        .tb-3{width:7px;height:7px;background:#ffeb3b;top:25px;left:5px;animation:orbit-3 5s infinite ease-in-out;}
+        @keyframes rotate-system{from{transform:rotate(0);}to{transform:rotate(360deg);}}
+        @keyframes orbit-1{0%{transform:translate(0,0);}50%{transform:translate(5px,10px);}100%{transform:translate(0,0);}}
+        @keyframes orbit-2{0%{transform:translate(0,0);}50%{transform:translate(-10px,-5px);}100%{transform:translate(0,0);}}
+        @keyframes orbit-3{0%{transform:translate(0,0);}50%{transform:translate(8px,-8px);}100%{transform:translate(0,0);}}
+
+        .secret-input-wrapper { display:flex; align-items:center; gap:10px; opacity:.6; transition:opacity .3s; }
+        .secret-input-wrapper:hover, .secret-input-wrapper:focus-within { opacity:1; }
+        .secret-label { font-size:14px; color:#b0bec5; white-space: nowrap; }
+        .secret-input { background:transparent; border:none; border-bottom:1px solid #78909c; color:#eceff1; font-size:16px; width:80px; text-align:center; font-family:inherit; outline:none; letter-spacing:2px; }
+        .secret-input::placeholder { color:#546e7a; font-style:italic; }
+        .easter-egg-hint { display: none; }
+
+        .stats-box, .god-mode-controls, .settings-controls { display:flex; flex-direction:column; gap:12px; margin-bottom:20px; text-align:center; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); width:90%; max-width:450px; max-height: 40vh; overflow-y: auto; touch-action: pan-y; }
+        .stat-item { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #555; padding-bottom:5px; }
+        .stat-label { font-size: clamp(14px, 3.5vw, 18px); color:#e0e0e0; font-weight:normal; } 
+        .stat-value { font-size: clamp(16px, 4vw, 22px); font-weight:bold; color:#fff; text-shadow:0 0 10px rgba(255,255,255,.5); }
+        #stat-betrayal { color:var(--color-danger); text-shadow:0 0 15px rgba(255,82,82,.8); }
+        .final-quote { font-size: clamp(14px, 3.5vw, 18px); color:#fff; margin-bottom:30px; max-width:90%; line-height:1.4; text-align:center; text-shadow:0 0 10px rgba(255,255,255,.2); }
+
+        button { padding: 10px 25px; font-size: clamp(14px, 3.5vw, 18px); background:transparent; color:#fff; border:2px solid #fff; cursor:pointer; transition:all .3s; font-family:inherit; letter-spacing:1px; margin: 5px; text-transform:uppercase; font-weight:bold; z-index:10; position:relative; white-space: nowrap; flex-shrink: 0; }
+        button:hover, button:active { background:#fff; color:#000; box-shadow:0 0 25px rgba(255,255,255,.4); }
+        #restart-btn:hover, #restart-btn:active { border-color:var(--color-danger); background:var(--color-danger); color:#fff; box-shadow:0 0 25px rgba(255,82,82,.6); }
+        #tutorial-btn:hover, #tutorial-btn:active { border-color:var(--color-primary); background:var(--color-primary); color:#000; }
+        #skip-tutorial-btn:hover, #skip-tutorial-btn:active { border-color:#aaa; background:#aaa; color:#000; box-shadow:0 0 15px rgba(255,255,255,.3); }
+        
+        .btn-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; width: 100%; margin-bottom: 20px; }
+        .start-prompt { font-size: clamp(18px, 4vw, 24px); color:#b0bec5; letter-spacing:3px; text-transform:uppercase; margin-top: 20px; text-align:center; animation:pulse 2s infinite; cursor:pointer; z-index:20; }
+        .hidden { display:none!important; }
+        .victory-text { color:#ffd54f; text-shadow:0 0 20px rgba(255,213,79,.5); }
+        .defeat-text { color:var(--color-danger); text-shadow:0 0 30px rgba(211,47,47,.8); font-family:"SimSun","Songti SC",serif; font-weight:bold; font-size: clamp(40px, 8vw, 80px); margin-bottom:20px; }
+        
+        .gm-row { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #444; padding-bottom:8px; }
+        .gm-label { font-size: clamp(14px, 3.5vw, 18px); color:#e0e0e0; }
+        .gm-input { background:transparent; border:1px solid #fff; color:#fff; font-size: clamp(14px, 3.5vw, 18px); width:60px; text-align:center; font-family:inherit; }
+        .settings-slider { width: 100px; vertical-align: middle; }
+        .settings-checkbox { width: 20px; height: 20px; vertical-align: middle; }
+
+        #fullscreen-btn { position: absolute; top: max(15px, env(safe-area-inset-top)); left: max(15px, env(safe-area-inset-left)); padding: 5px 10px; font-size: 12px; border: 1px solid #fff; color: #fff; background: rgba(0,0,0,0.5); z-index: 100; display: flex; align-items: center; justify-content: center; }
+
+        #minimap-wrapper{ position: absolute; right: max(15px, env(safe-area-inset-right)); top: max(60px, calc(env(safe-area-inset-top) + 40px)); z-index: 65; pointer-events: none; padding: 4px; background: rgba(0,0,0,0.45); border:1px solid rgba(0,255,255,0.4); border-radius: 8px; box-shadow: 0 0 18px rgba(0,255,255,0.2); transition: all 0.3s ease; transform-origin: top right; transform: scale(0.8); }
+        #minimap-title{ font-size: 12px; color: #a5f2f2; letter-spacing: 2px; text-align: center; margin-bottom: 4px; text-shadow: 0 0 6px rgba(0,255,255,0.5); }
+        #minimap{ display:block; background: rgba(3,8,10,0.85); border:1px solid rgba(0,255,255,0.25); transition: width 0.3s, height 0.3s; }
+
+        .energy-box{ position:absolute; left:20%; right:20%; bottom: max(15px, env(safe-area-inset-bottom)); display:flex; flex-direction:column; gap:4px; align-items:center; pointer-events:none; }
+        .energy-label{ font-size:12px; color:#a5f2f2; letter-spacing:1px; text-align:center; }
+        .energy-track{ width:100%; height:6px; background:rgba(255,255,255,0.08); border:1px solid rgba(0,255,255,0.25); border-radius:4px; overflow:hidden; }
+        .energy-fill{ height:100%; width:100%; background:linear-gradient(90deg, #00e676, #00b0ff); transition:width 0.1s linear; }
+        .energy-text{ font-size:10px; color:#cfd8dc; }
+
+        #energy-vignette{ position: fixed; inset: 0; pointer-events: none; z-index: 2; background: radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 80%, rgba(0,0,0,0.7) 100%); opacity: 0; transition: opacity 0.1s linear; }
+
+        #mobile-controls { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
+        .joystick-zone { position: absolute; bottom: max(30px, env(safe-area-inset-bottom)); width: 110px; height: 110px; background: rgba(255, 255, 255, 0.05); border: 2px solid rgba(255, 255, 255, 0.2); border-radius: 50%; pointer-events: auto; display: flex; justify-content: center; align-items: center; }
+        #stick-left { left: max(30px, env(safe-area-inset-left)); }
+        #stick-right { right: max(30px, env(safe-area-inset-right)); }
+        .joystick-knob { width: 45px; height: 45px; background: rgba(255, 255, 255, 0.4); border-radius: 50%; box-shadow: 0 0 10px rgba(255, 255, 255, 0.3); position: absolute; transform: translate(0, 0); }
+        #mobile-signal-btn { position: absolute; bottom: max(140px, calc(env(safe-area-inset-bottom) + 110px)); right: max(25px, env(safe-area-inset-right)); width: 55px; height: 55px; background: rgba(0, 230, 118, 0.2); border: 2px solid #00e676; border-radius: 50%; pointer-events: auto; color: #00e676; font-size: 24px; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 10px rgba(0, 230, 118, 0.3); }
+        #mobile-signal-btn:active { background: rgba(0, 230, 118, 0.6); color: #fff; }
+        @media (max-width: 667px) { .joystick-zone { width: 90px; height: 90px; } .joystick-knob { width: 35px; height: 35px; } #mobile-signal-btn { width: 45px; height: 45px; bottom: max(130px, calc(env(safe-area-inset-bottom) + 100px)); } }
+    </style>
+</head>
+<body oncontextmenu="return false;">
+
+    <div id="landscape-lock">
+        <svg viewBox="0 0 24 24"><path d="M17,1.01L7,1C5.9,1,5,1.9,5,3v18c0,1.1,0.9,2,2,2h10c1.1,0,2-0.9,2-2V3C19,1.9,18.1,1.01,17,1.01z M17,19H7V5h10V19z"/></svg>
+        <h2>为了最佳体验<br>请将手机旋转至横屏</h2>
+    </div>
+
+    <div id="ui-layer" class="hidden">
+        <button id="settings-btn">⚙️</button>
+        <div id="top-hud">
+            <div id="peace-timer">和平时间: 10s</div>
+            <!-- 新增广播显示区域 -->
+            <div id="game-broadcast"></div>
+            <div id="tutorial-instruction"></div>
+            <div id="enemy-status-bar"></div>
+        </div>
+        <div id="cosmic-echo-banner">宇宙回声<br><span style="font-size:0.5em; letter-spacing:2px;">坐标已暴露！</span></div>
+        <div class="score-board">幸存者: <span id="survivor-count">21</span></div>
+        <div class="status-panel">
+            <div class="ammo-display">
+                <div style="min-width: 100px;"><div>子弹: <span id="ammo-count">3</span> <span id="reload-hint" class="reload-text">装填中...</span></div><div class="ammo-regen-bar" id="ammo-regen-bar"></div></div>
+                <div id="ammo-visuals" style="display:flex; gap:2px; margin-left: 10px;"></div>
+            </div>
+            <div class="health-bar-container" id="player-health-ui"></div>
+        </div>
+        <div class="energy-box">
+            <div class="energy-label">能源条（耗尽后，将会掉血） <span class="energy-text" id="energy-text">15.0s</span></div>
+            <div class="energy-track"><div class="energy-fill" id="energy-bar-fill"></div></div>
+        </div>
+        <div id="minimap-wrapper"><div id="minimap-title">战场小地图</div><canvas id="minimap" width="220" height="220"></canvas></div>
+        <div id="mobile-controls">
+            <div id="stick-left" class="joystick-zone"><div class="joystick-knob"></div></div>
+            <div id="stick-right" class="joystick-zone"><div class="joystick-knob" style="background: rgba(255, 82, 82, 0.4);"></div></div>
+            <div id="mobile-signal-btn">😊</div>
+        </div>
+    </div>
+    <div id="energy-vignette"></div>
+
+    <div id="pause-menu">
+        <div class="page-container">
+            <h2 style="color: #fff; font-size: clamp(24px, 6vw, 40px); margin-bottom: 20px;">游戏暂停</h2>
+            <div class="settings-controls">
+                <div class="gm-row"><span class="gm-label">输入密语 (彩蛋)</span><input type="text" id="setting-secret" class="gm-input" style="width: 120px; text-transform: lowercase;" placeholder="____"></div>
+                <div class="gm-row"><span class="gm-label">声音效果</span><input type="checkbox" id="setting-sound" class="settings-checkbox" checked></div>
+                <div class="gm-row"><span class="gm-label">开启小地图</span><input type="checkbox" id="setting-minimap-toggle" class="settings-checkbox" checked></div>
+                <div class="gm-row"><span class="gm-label">小地图尺寸</span><input type="range" id="setting-minimap-size" class="settings-slider" min="0.5" max="1.5" step="0.1" value="1.0"></div>
+            </div>
+            <div class="btn-group"><button id="resume-btn" style="border-color: #00e676; color: #00e676;">继续游戏</button><button id="quit-btn" style="border-color: #ff5252; color: #ff5252;">退出游戏</button></div>
+        </div>
+    </div>
+
+    <div id="menu-overlay">
+        <button id="fullscreen-btn">🖥️ 开启全屏</button>
+        <div id="page-title" class="page-container">
+            <h1 class="main-title">猜疑链</h1><div class="sub-title">黑暗森林</div>
+            <div class="visual-container">
+                <div class="wave-group-white"><div class="wave-circle-white"></div><div class="wave-circle-white"></div><div class="wave-circle-white"></div><div class="wave-circle-white"></div></div>
+                <div class="wave-group-red"><div class="wave-circle-red"></div><div class="wave-circle-red"></div><div class="red-core"></div></div>
+            </div>
+            <div id="start-prompt" class="start-prompt">按任意键开始</div>
+        </div>
+        <div id="page-rules" class="page-container hidden">
+            <div class="info-text">
+                <p>3发子弹，随着时间恢复</p>
+                <p>示好后，会正式结交<br><span style="color: #69f0ae; font-weight: bold;">结交会带来巨大收益！</span></p>
+                <p class="blood-warning">请注意，不是每一个示好都是真心！<br>小心伪装！</p>
+            </div>
+            <button id="next-btn-2">下一步</button>
+        </div>
+        <div id="page-controls" class="page-container hidden">
+            <div id="tutorial-lock-msg" class="tutorial-prompt">检测到您是初次进入黑暗森林<br>请先完成生存训练</div>
+            <div id="controls-info-box" class="controls-info">
+                <div><span class="highlight-key">WASD / 左摇杆</span> 移动</div>
+                <div style="margin-top: 10px;">鼠标左键 / <span class="highlight-key">😊按钮</span> 示好</div>
+                <div style="margin-top: 5px;">鼠标右键 / <span class="highlight-key">右摇杆</span> 射击</div>
+            </div>
+            <div class="btn-group">
+                <button id="tutorial-btn" style="border-color: #69f0ae; background: transparent; color: #69f0ae;">新手教学</button>
+                <button id="start-game-btn">进入森林</button>
+                <button id="skip-tutorial-btn" style="border-color: #666; color: #888; font-size: 12px; padding: 10px 15px;">跳过教学</button>
+            </div>
+            <div class="easter-egg-area">
+                <div class="three-body-visual"><div class="tb-sun tb-1"></div><div class="tb-sun tb-2"></div><div class="tb-sun tb-3"></div></div>
+                <div class="secret-input-wrapper"><span class="secret-label">密语:</span><input type="text" id="secret-code-input" class="secret-input" placeholder="____" maxlength="20" autocomplete="off"></div>
+            </div>
+        </div>
+        <div id="page-god-mode" class="page-container hidden">
+            <h2 style="color: #ffd54f; font-size: clamp(24px, 6vw, 40px); margin-bottom: 20px;">上帝模式配置</h2>
+            <div class="god-mode-controls">
+                <div class="gm-row"><span class="gm-label">狂暴派 (杀戮者)</span><input type="number" id="gm-aggressor" class="gm-input" value="5" min="0" max="50"></div>
+                <div class="gm-row"><span class="gm-label">伪装者 (背叛者)</span><input type="number" id="gm-deceiver" class="gm-input" value="25" min="0" max="50"></div>
+                <div class="gm-row"><span class="gm-label">和平派 (结盟者)</span><input type="number" id="gm-pacifist" class="gm-input" value="10" min="0" max="50"></div>
+                <div class="gm-row"><span class="gm-label">初始子弹数</span><input type="number" id="gm-ammo" class="gm-input" value="3" min="1" max="999"></div>
+                <div class="gm-row"><span class="gm-label" style="color:#81c784">玩家初始血量</span><input type="number" id="gm-player-hp" class="gm-input" value="4" min="1" max="999"></div>
+            </div>
+            <button id="start-god-btn" style="border-color: #ffd54f; color: #ffd54f;">启动推演</button>
+        </div>
+        <div id="page-game-over" class="page-container hidden">
+            <h2 id="end-title">文明灭亡了</h2>
+            <div id="final-score" style="display: none;"></div>
+            <div class="stats-box">
+                <div class="stat-item"><span class="stat-label">发出示好：</span><span class="stat-value" id="stat-signal">0</span></div>
+                <div class="stat-item"><span class="stat-label">达成结盟：</span><span class="stat-value" id="stat-alliance">0</span></div>
+                <div class="stat-item"><span class="stat-label">死于背叛：</span><span class="stat-value" id="stat-betrayal">0</span></div>
+            </div>
+            <div id="end-quote" class="final-quote"></div>
+            <button id="restart-btn">重返森林</button>
+        </div>
+    </div>
+
+    <canvas id="gameCanvas"></canvas>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('touchmove', function(e) { if (!e.target.closest('#menu-overlay') && !e.target.closest('#pause-menu')) { e.preventDefault(); } }, { passive: false });
+    document.addEventListener('dblclick', function(event) { event.preventDefault(); }, { passive: false });
+
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const uiLayer = document.getElementById('ui-layer');
+    const echoBanner = document.getElementById('cosmic-echo-banner');
+    const broadcastBanner = document.getElementById('game-broadcast'); // 新增引用
+    const minimapWrap = document.getElementById('minimap-wrapper');
+    const minimapCanvas = document.getElementById('minimap');
+    const mmCtx = minimapCanvas.getContext('2d');
+    const energyBarFill = document.getElementById('energy-bar-fill');
+    const energyText = document.getElementById('energy-text');
+    const energyVignette = document.getElementById('energy-vignette');
+    const menuOverlay = document.getElementById('menu-overlay');
+    const pauseMenu = document.getElementById('pause-menu');
+    const pageTitle = document.getElementById('page-title');
+    const pageRules = document.getElementById('page-rules');
+    const pageControls = document.getElementById('page-controls');
+    const pageGameOver = document.getElementById('page-game-over');
+    const pageGodMode = document.getElementById('page-god-mode');
+    const tutorialLockMsg = document.getElementById('tutorial-lock-msg');
+    const controlsInfoBox = document.getElementById('controls-info-box');
+    const nextBtn2 = document.getElementById('next-btn-2');
+    const startGameBtn = document.getElementById('start-game-btn');
+    const tutorialBtn = document.getElementById('tutorial-btn');
+    const skipTutorialBtn = document.getElementById('skip-tutorial-btn');
+    const restartBtn = document.getElementById('restart-btn');
+    const startGodBtn = document.getElementById('start-god-btn');
+    const settingsBtn = document.getElementById('settings-btn');
+    const resumeBtn = document.getElementById('resume-btn');
+    const quitBtn = document.getElementById('quit-btn');
+    const fullscreenBtn = document.getElementById('fullscreen-btn');
+    const secretInput = document.getElementById('secret-code-input');
+    const settingSecretInput = document.getElementById('setting-secret');
+    const gmAggressor = document.getElementById('gm-aggressor');
+    const gmDeceiver = document.getElementById('gm-deceiver');
+    const gmPacifist = document.getElementById('gm-pacifist');
+    const gmAmmo = document.getElementById('gm-ammo');
+    const gmPlayerHp = document.getElementById('gm-player-hp');
+    const settingSound = document.getElementById('setting-sound');
+    const settingMinimapToggle = document.getElementById('setting-minimap-toggle');
+    const settingMinimapSize = document.getElementById('setting-minimap-size');
+    const endTitle = document.getElementById('end-title');
+    const finalScoreEl = document.getElementById('final-score');
+    const statSignalEl = document.getElementById('stat-signal');
+    const statAllianceEl = document.getElementById('stat-alliance');
+    const statBetrayalEl = document.getElementById('stat-betrayal');
+    const endQuoteEl = document.getElementById('end-quote');
+    const survivorEl = document.getElementById('survivor-count');
+    const playerHealthUi = document.getElementById('player-health-ui');
+    const ammoCountEl = document.getElementById('ammo-count');
+    const ammoVisualsEl = document.getElementById('ammo-visuals');
+    const ammoRegenBar = document.getElementById('ammo-regen-bar');
+    const reloadHintEl = document.getElementById('reload-hint');
+    const peaceTimerEl = document.getElementById('peace-timer');
+    const enemyStatusBar = document.getElementById('enemy-status-bar');
+    const tutorialInstructionEl = document.getElementById('tutorial-instruction');
+
+    let worldWidth, worldHeight;
+    const camera = { x: 0, y: 0 };
+    let isTutorialCompleted = false;
+    let gameConfig = { aiCounts: { AGGRESSOR: 5, DECEIVER: 25, PACIFIST: 10 }, initialAmmo: 3, initialHp: 4 };
+    let isPaused = false;
+    let soundEnabled = true;
+    let minimapBaseSize = 220;
+    const ENERGY_BASE_MS = 15000;
+    const ENERGY_ALLIANCE_BONUS_MS = 15000;
+    const ENERGY_HEALTH_TICK_MS = 3000;
+    let energyMaxMs = ENERGY_BASE_MS;
+    let energyMs = ENERGY_BASE_MS;
+    let lastFrameTime = performance.now();
+    let energyDepleteTimer = 0;
+    const ECHO_FIRST_DELAY = 5000;
+    const ECHO_INTERVAL = 30000;
+    const ECHO_WAVE_SPEED = 1200;
+    const ECHO_WAVE_FADE = 0.5;
+    let echoWaves = [];
+    let echoRevealActive = false;
+    let firstEchoTimeoutId=null, echoIntervalId=null;
+    let gameMode = 'survival';
+    let tutorialState = { step: 0, movedDist: 0, targetsHit: 0, targetsNeeded: 3, startPos: null };
+    let tutorialTargets = [];
+
+    // === 广播系统相关变量 ===
+    const broadcastMilestones = [23, 13, 8, 3];
+    let visitedMilestones = new Set();
+    // 经典语录库
+    const quotes = [
+        "宇宙就是一座黑暗森林，每个文明都是带枪的猎人。",
+        "在猜疑链中，善意是最奢侈的赌注。",
+        "给岁月以文明，而不是给文明以岁月。",
+        "弱小和无知不是生存的障碍，傲慢才是。",
+        "失去人性，失去很多；失去兽性，失去一切。",
+        "不要回答！不要回答！不要回答！",
+        "没关系的，都一样。",
+        "主不在乎。",
+        "前进！前进！！不择手段地前进！！！",
+        "你被骗了。"
+    ];
+
+    function resize() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        worldWidth = canvas.width * 5;
+        worldHeight = canvas.height * 5;
+    }
+    resize();
+    window.addEventListener('resize', () => { resize(); initTrees(); });
+    fullscreenBtn.addEventListener('click', () => {
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) { elem.requestFullscreen(); } 
+        else if (elem.webkitRequestFullscreen) { elem.webkitRequestFullscreen(); } 
+        else if (elem.msRequestFullscreen) { elem.msRequestFullscreen(); }
+        fullscreenBtn.style.display = 'none';
+    });
+
+    let gameRunning = false;
+    let score = 0;
+    let peaceTimeRemaining = 10;
+    let isPeaceTime = true;
+    let peaceIntervalId;
+    let statSignaledIds = new Set();
+    let statAlliances = 0;
+    let statBetrayals = 0;
+    const keys = { w: false, a: false, s: false, d: false };
+    const mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+    let isSignalDown = false;
+
+    function checkSecretCode(val) {
+        val = val.toLowerCase();
+        if (val === "threebody" || val === "三体") {
+            if (isPaused) togglePause();
+            triggerGodMode();
+            return true;
+        }
+        return false;
+    }
+    secretInput.addEventListener('input', (e) => { if (checkSecretCode(e.target.value)) e.target.value = ""; });
+    settingSecretInput.addEventListener('input', (e) => { if (checkSecretCode(e.target.value)) { e.target.value = ""; alert("上帝模式已激活！请退出当前游戏并在主菜单配置。"); gameRunning = false; togglePause(); softResetToMenu(); triggerGodMode(); } });
+
+    function togglePause() {
+        if (!gameRunning) return;
+        isPaused = !isPaused;
+        if (isPaused) { pauseMenu.style.display = 'flex'; settingsBtn.style.display = 'none'; } 
+        else { pauseMenu.style.display = 'none'; settingsBtn.style.display = 'flex'; lastFrameTime = performance.now(); animate(); }
+    }
+
+    settingsBtn.addEventListener('click', togglePause);
+    resumeBtn.addEventListener('click', togglePause);
+    quitBtn.addEventListener('click', () => { togglePause(); gameRunning = false; softResetToMenu(); });
+    settingSound.addEventListener('change', (e) => { soundEnabled = e.target.checked; });
+    settingMinimapToggle.addEventListener('change', (e) => { minimapWrap.style.display = e.target.checked ? 'block' : 'none'; });
+    settingMinimapSize.addEventListener('input', (e) => { const scale = parseFloat(e.target.value); const newSize = minimapBaseSize * scale; minimapCanvas.style.width = newSize + 'px'; minimapCanvas.style.height = newSize + 'px'; });
+
+    let inputSequence = "";
+    let onTitleScreen = true;
+
+    window.addEventListener('keydown', (e) => {
+        if (onTitleScreen && !pageTitle.classList.contains('hidden')) { goToNextPage(); return; }
+        if (document.activeElement === secretInput || document.activeElement === settingSecretInput) return;
+        if (e.key === 'Escape') { togglePause(); return; }
+        if (!isPaused) {
+            if (e.key.length === 1) {
+                inputSequence += e.key.toLowerCase();
+                if (inputSequence.length > 20) inputSequence = inputSequence.slice(-20);
+                if (inputSequence.endsWith("threebody") || inputSequence.endsWith("三体")) { triggerGodMode(); inputSequence = ""; }
+            }
+            const k = e.key.toLowerCase();
+            if (keys.hasOwnProperty(k)) keys[k] = true;
+        }
+    });
+
+    window.addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); if (keys.hasOwnProperty(k)) keys[k] = false; });
+    window.onmousedown = (e) => {
+        if (e.target === settingsBtn || isPaused) return;
+        if (onTitleScreen && !pageTitle.classList.contains('hidden')) { goToNextPage(); } 
+        else if (e.button === 2) {
+            if (!gameRunning || isPaused) return;
+            if (gameMode === 'survival' && isPeaceTime) return;
+            if (player.consumeAmmo()) {
+                const worldMouseX = mouse.x + camera.x;
+                const worldMouseY = mouse.y + camera.y;
+                const angle = Math.atan2(worldMouseY - player.y, worldMouseX - player.x);
+                const vel = {x: Math.cos(angle)*12, y: Math.sin(angle)*12};
+                projectiles.push(new Projectile(player.x, player.y, 4, '#ffd54f', vel, player.squad));
+                flashes.push(new MuzzleFlash(player.x, player.y));
+                playSound('shoot');
+            }
+        } else if (e.button === 0) {
+            if (!gameRunning || isPaused) return;
+            isSignalDown = true;
+        }
+    };
+    window.addEventListener('mouseup', e => { if (e.button === 0) isSignalDown = false; });
+    window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+
+    nextBtn2.addEventListener('click', () => { pageRules.classList.add('hidden'); pageControls.classList.remove('hidden'); updateControlsPage(); });
+    startGameBtn.addEventListener('click', () => { init('survival'); menuOverlay.classList.add('hidden'); gameRunning = true; animate(); });
+    tutorialBtn.addEventListener('click', () => { init('tutorial'); menuOverlay.classList.add('hidden'); gameRunning = true; animate(); });
+    skipTutorialBtn.addEventListener('click', () => { isTutorialCompleted = true; updateControlsPage(); });
+    restartBtn.addEventListener('click', () => { menuOverlay.classList.remove('hidden'); pageGameOver.classList.add('hidden'); pageTitle.classList.add('hidden'); pageRules.classList.add('hidden'); pageGodMode.classList.add('hidden'); pageControls.classList.remove('hidden'); updateControlsPage(); });
+    startGodBtn.addEventListener('click', () => {
+        gameConfig.aiCounts.AGGRESSOR = parseInt(gmAggressor.value) || 0;
+        gameConfig.aiCounts.DECEIVER = parseInt(gmDeceiver.value) || 0;
+        gameConfig.aiCounts.PACIFIST = parseInt(gmPacifist.value) || 0;
+        gameConfig.initialAmmo = parseInt(gmAmmo.value) || 3;
+        gameConfig.initialHp = parseInt(gmPlayerHp.value) || 4;
+        init('survival'); menuOverlay.classList.add('hidden'); gameRunning = true; animate();
+    });
+
+    function playSound(type) { if (!soundEnabled) return; }
+    function goToNextPage(){ onTitleScreen = false; pageTitle.classList.add('hidden'); pageRules.classList.remove('hidden'); }
+    function updateControlsPage(){
+        if (!isTutorialCompleted) { controlsInfoBox.classList.add('hidden'); startGameBtn.classList.add('hidden'); tutorialLockMsg.style.display = 'block'; tutorialBtn.classList.add('tutorial-highlight'); skipTutorialBtn.classList.remove('hidden'); } 
+        else { controlsInfoBox.classList.remove('hidden'); startGameBtn.classList.remove('hidden'); tutorialLockMsg.style.display = 'none'; tutorialBtn.classList.remove('tutorial-highlight'); skipTutorialBtn.classList.add('hidden'); }
+    }
+    function triggerGodMode(){
+        if (!menuOverlay.classList.contains('hidden')) { pageTitle.classList.add('hidden'); pageRules.classList.add('hidden'); pageControls.classList.add('hidden'); pageGameOver.classList.add('hidden'); pageGodMode.classList.remove('hidden'); }
+    }
+    function softResetToMenu(){
+        gameRunning = false; menuOverlay.classList.remove('hidden'); pageTitle.classList.add('hidden'); pageRules.classList.add('hidden'); pageGameOver.classList.add('hidden'); pageGodMode.classList.add('hidden'); pageControls.classList.remove('hidden'); tutorialInstructionEl.style.display = 'none'; survivorEl.parentElement.style.display = 'block'; uiLayer.classList.add('hidden'); updateControlsPage(); onTitleScreen = true; pageTitle.classList.remove('hidden'); fullscreenBtn.style.display = 'flex';
+    }
+
+    class MuzzleFlash{ constructor(x,y){ this.x=x; this.y=y; this.radius=400; this.life=1.0; this.decay=0.15; } update(){ this.life-=this.decay; } draw(ctx){ ctx.save(); ctx.globalAlpha=this.life*0.4; const grad=ctx.createRadialGradient(this.x,this.y,20,this.x,this.y,this.radius); grad.addColorStop(0,'rgba(255,255,200,1)'); grad.addColorStop(1,'rgba(255,255,200,0)'); ctx.fillStyle=grad; ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2); ctx.fill(); ctx.restore(); } }
+    class Squad{ constructor(member){ this.members=[member]; this.health=member.maxHealth; this.maxHealth=member.maxHealth; this.ammo=gameConfig.initialAmmo; this.maxAmmo=gameConfig.initialAmmo; this.color='#fff'; this.regenTime=1000; this.lastRegenTick=Date.now(); } update(){ if(this.ammo<this.maxAmmo){ const now=Date.now(); const progress=(now-this.lastRegenTick)/this.regenTime; if(this.members.includes(player)){ ammoRegenBar.style.width=Math.min(progress*100,100)+'%'; reloadHintEl.classList.add('visible'); } if(now-this.lastRegenTick>this.regenTime){ this.ammo++; this.lastRegenTick=now; } }else{ this.lastRegenTick=Date.now(); if(this.members.includes(player)){ ammoRegenBar.style.width='0%'; reloadHintEl.classList.remove('visible'); } } } addMember(newMember){ if(this.members.length+newMember.squad.members.length>5) return false; const baseMax = Math.max(this.maxHealth, newMember.squad.maxHealth); const newMaxHealth= baseMax * 2; const newMaxAmmo=gameConfig.initialAmmo*2; const allMembers=[...this.members, ...newMember.squad.members]; newMember.squad.members=[]; allMembers.forEach(m=>{ m.squad=this; m.health=newMaxHealth; m.maxHealth=newMaxHealth; m.ammo=newMaxAmmo; m.maxAmmo=newMaxAmmo; }); this.maxHealth = newMaxHealth; this.members=allMembers; this.color='#00e676'; return true; } }
+    class Projectile{ constructor(x,y,radius,color,velocity,ownerSquad){ this.x=x; this.y=y; this.radius=radius; this.color=color; this.velocity=velocity; this.ownerSquad=ownerSquad; } draw(){ ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2); ctx.fillStyle=this.color; ctx.fill(); } update(){ this.x+=this.velocity.x; this.y+=this.velocity.y; this.draw(); } }
+    class Particle{ constructor(x,y,radius,color,velocity){ this.x=x; this.y=y; this.radius=radius; this.color=color; this.velocity=velocity; this.alpha=1; } update(){ this.x+=this.velocity.x; this.y+=this.velocity.y; this.velocity.x*=0.95; this.velocity.y*=0.95; this.alpha-=0.02; ctx.save(); ctx.globalAlpha=this.alpha; ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2); ctx.fillStyle=this.color; ctx.fill(); ctx.restore(); } }
+    class Tree{ constructor(x,y,radius){ this.x=x; this.y=y; this.radius=radius; const shade=Math.floor(Math.random()*20+10); this.color=`rgb(${shade}, ${shade+15}, ${shade})`; } draw(){ ctx.beginPath(); ctx.arc(this.x,this.y,this.radius,0,Math.PI*2,false); ctx.fillStyle=this.color; ctx.fill(); } }
+    
+    class BaseUnit{
+        constructor(x,y,radius,color, initialHp = 4){ this.x=x; this.y=y; this.radius=radius; this.baseColor=color; this.angle=0; this.isSignaling=false; this.allianceTarget=null; this.allianceProgress=0; this.uid=Math.random().toString(36).substr(2,9); this.health=initialHp; this.maxHealth=initialHp; this.ammo=gameConfig.initialAmmo; this.maxAmmo=gameConfig.initialAmmo; this.regenTime=1000; this.lastRegenTick=Date.now(); this.currentEmoji=null; this.emojiTimer=0; this.squad=new Squad(this); }
+        updateAmmo(){ if(this.ammo<this.maxAmmo){ const now=Date.now(); const progress=(now-this.lastRegenTick)/this.regenTime; if(this===player){ ammoRegenBar.style.width=Math.min(progress*100,100)+'%'; reloadHintEl.classList.add('visible'); } if(now-this.lastRegenTick>this.regenTime){ this.ammo++; this.lastRegenTick=now; } } else { this.lastRegenTick=Date.now(); if(this===player){ ammoRegenBar.style.width='0%'; reloadHintEl.classList.remove('visible'); } } }
+        consumeAmmo(){ if(this.ammo>0){ this.ammo--; this.lastRegenTick=Date.now(); return true; } return false; }
+        takeDamage(amount){ this.health-=amount; if(this.health<0) this.health=0; if(this.health>0 && this instanceof Enemy){ if(this.aiType==='PACIFIST'){ this.showEmoji("😭",60); this.provoked=true; } else if(this.aiType==='DECEIVER'){ if(!isPeaceTime){ this.showEmoji("😡",60); this.angryTimer=180; } } } }
+        showEmoji(text,dur){ this.currentEmoji=text; this.emojiTimer=dur; }
+        drawSignal(){ if(this.emojiTimer>0){ this.emojiTimer--; ctx.save(); ctx.globalAlpha=1; ctx.font="30px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; const floatY=Math.sin(Date.now()/100)*5; ctx.fillText(this.currentEmoji,0,-this.radius-60+floatY); ctx.restore(); } if(this.isSignaling){ if(gameMode!=='tutorial') statSignaledIds.add(this.uid); ctx.save(); ctx.beginPath(); const ringRadius=this.radius+25+Math.sin(Date.now()/150)*3; ctx.arc(0,0,ringRadius,0,Math.PI*2); ctx.strokeStyle='#00e676'; ctx.lineWidth=1.5; ctx.globalAlpha=0.3; ctx.stroke(); ctx.beginPath(); ctx.arc(0,0,this.radius+5,0,Math.PI*2); ctx.fillStyle='#00e676'; ctx.globalAlpha=0.1; ctx.fill(); if(this.emojiTimer<=0){ ctx.globalAlpha=1; ctx.font="24px sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; const fy=Math.sin(Date.now()/200)*4; const fx=Math.cos(Date.now()/300)*2; ctx.fillText("😊",fx,-this.radius-50+fy); } ctx.restore(); } }
+        drawAllianceBar(ctx2){ if(this.allianceTarget && this.allianceProgress>0){ const width=40, height=4, x=-width/2, y=-this.radius-25; ctx2.fillStyle='rgba(0,0,0,0.5)'; ctx2.fillRect(x,y,width,height); const prog=Math.min(this.allianceProgress/3000,1.0); ctx2.fillStyle='#00e676'; ctx2.fillRect(x,y,width*prog,height); ctx2.strokeStyle='#00e676'; ctx2.lineWidth=0.5; ctx2.strokeRect(x,y,width,height); } }
+        drawHealth(ctx2){ const max=this.maxHealth, current=this.health; if (max > 20) { const barWidth=40, barHeight=6; const pct = current / max; ctx2.fillStyle = '#333'; ctx2.fillRect(-barWidth/2, -this.radius-15, barWidth, barHeight); ctx2.fillStyle = (this.squad===player.squad?'#2e7d32':'#d32f2f'); ctx2.fillRect(-barWidth/2, -this.radius-15, barWidth * pct, barHeight); return; } const barWidth=40, barHeight=6, gap=2, segmentWidth=barWidth/4; const totalWidth=(segmentWidth*max)+(gap*(max-1)); const startX=-totalWidth/2; for(let i=0;i<max;i++){ ctx2.fillStyle=(i<current)?(this.squad===player.squad?'#2e7d32':'#d32f2f'):'#333'; ctx2.fillRect(startX+i*(segmentWidth+gap), -this.radius-15, segmentWidth, barHeight); } }
+        checkAlliance(others){ if(this.squad.members.length>=5) return; let partner=null, minDist=250; for(let other of others){ if(other===this || other.squad===this.squad) continue; if(this.squad.members.length+other.squad.members.length>5) continue; if(other.allianceTarget && other.allianceTarget!==this) continue; const dist=Math.hypot(this.x-other.x, this.y-other.y); if(dist<minDist && this.isSignaling && other.isSignaling){ partner=other; minDist=dist; } } if(partner){ this.allianceTarget=partner; this.allianceProgress+=16; if(this.allianceProgress>3000){ const ok=this.squad.addMember(partner); if(ok){ if(gameMode!=='tutorial') statAlliances++; if(this===player || partner===player || this.squad===player.squad || partner.squad===player.squad){ gainEnergyCapacityBonus(); } this.allianceProgress=0; this.allianceTarget=null; createExplosion(this.x,this.y,'#00e676',20); createExplosion(partner.x,partner.y,'#00e676',20); playSound('alliance'); if(gameMode==='tutorial' && tutorialState.step===2){ completeTutorial(); } } } }else{ this.allianceProgress=0; this.allianceTarget=null; } }
+    }
+    class Player extends BaseUnit{ constructor(x,y){ super(x,y,12,'#81c784', gameConfig.initialHp); this.speed=4; } update(enemies){ this.updateAmmo(); this.isSignaling=isSignalDown; let moved=false; if(keys.w && this.y-this.radius>0){ this.y-=this.speed; moved=true; } if(keys.s && this.y+this.radius<worldHeight){ this.y+=this.speed; moved=true; } if(keys.a && this.x-this.radius>0){ this.x-=this.speed; moved=true; } if(keys.d && this.x+this.radius<worldWidth){ this.x+=this.speed; moved=true; } if(moved && gameMode==='tutorial' && tutorialState.step===0){ tutorialState.movedDist+=this.speed; if(tutorialState.movedDist>500){ tutorialState.step=1; updateTutorialUI(); spawnTutorialTargets(); } } const dx=(mouse.x+camera.x)-this.x, dy=(mouse.y+camera.y)-this.y; this.angle=Math.atan2(dy,dx); this.checkAlliance(enemies); this.draw(); } draw(){ ctx.save(); ctx.translate(this.x,this.y); this.drawSignal(); this.drawHealth(ctx); this.drawAllianceBar(ctx); ctx.rotate(this.angle); ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,300,-0.35,0.35); const gradient=ctx.createRadialGradient(0,0,0,0,0,300); gradient.addColorStop(0,'rgba(255,255,200,0.4)'); gradient.addColorStop(1,'rgba(255,255,200,0)'); ctx.fillStyle=gradient; ctx.fill(); ctx.beginPath(); ctx.arc(0,0,this.radius,0,Math.PI*2); ctx.fillStyle=(this.squad.members.length>1)?'#00e676':this.baseColor; ctx.fill(); ctx.strokeStyle='#1b5e20'; ctx.lineWidth=2; ctx.stroke(); ctx.fillStyle='#111'; ctx.fillRect(5,-3,15,6); ctx.restore(); } }
+    class Enemy extends BaseUnit{ constructor(x,y,aiType){ super(x,y,15,'#ef5350'); this.speed=Math.random()*1.5+2.5; this.lastShotTime=Date.now(); this.shootInterval=Math.random()*1500+500; this.aiType=aiType||'DECEIVER'; this.provoked=false; this.wanderDest=null; this.wanderTimer=0; this.attackDest=null; this.attackTimer=0; this.angryTimer=0; this.betrayalTimer=0; this.mode='EXPLORING'; this.isTutorialTarget=false; this.signalTimer=0; this.isDeceiverInAttack=false; this.attackPhaseTimer=0; } update(allUnits){ this.updateAmmo(); if(gameMode==='tutorial'){ if(this.isTutorialTarget){ this.draw(); return; } if(this.aiType==='PACIFIST'){ const dist=Math.hypot(player.x-this.x, player.y-this.y); if(dist>150){ const ang=Math.atan2(player.y-this.y, player.x-this.x); this.x+=Math.cos(ang)*3; this.y+=Math.sin(ang)*3; this.angle=ang; } this.isSignaling=true; this.checkAlliance(allUnits); this.draw(); return; } } let target=null, minDist=10000; for(let unit of allUnits){ if(unit===this || unit.squad===this.squad) continue; const d=Math.hypot(this.x-unit.x, this.y-unit.y); if(d<minDist){ minDist=d; target=unit; } } this.isSignaling = (this.aiType==='PACIFIST' && !this.provoked && this.squad.members.length===1); if(this.squad.members.length>1 && this.squad.members.includes(player)){ this.mode='FOLLOW_PLAYER'; } else if(this.mode==='EXPLORING'){ const aggroDist=isPeaceTime?150:600; if(target){ const isSignalingMe=target.isSignaling && minDist<600; const isTooClose=minDist<aggroDist; let shouldEngage=false; if(!isPeaceTime){ if(isTooClose || isSignalingMe || (this.provoked && minDist<800)) shouldEngage=true; } else{ if(this.aiType!=='AGGRESSOR'){ if(isTooClose || isSignalingMe){ if(target.allianceTarget && target.allianceTarget!==this){ this.mode='EXPLORING'; const angAway=Math.atan2(this.y-target.y, this.x-target.x); this.wanderDest={x:this.x+Math.cos(angAway)*1000, y:this.y+Math.sin(angAway)*1000}; this.wanderTimer=300; shouldEngage=false; }else{ shouldEngage=true; } } } } if(this.aiType==='PACIFIST' && (this.squad.members.length>1 || this.provoked)){ if(target.isSignaling){ shouldEngage=false; this.isSignaling=true; } else { shouldEngage=true; } } if(shouldEngage){ this.mode='ENGAGING'; this.attackTimer=0; } } } else if(this.mode==='ENGAGING'){ if(!target || minDist>1000){ this.mode='EXPLORING'; this.wanderDest=null; } } if(this.mode==='FOLLOW_PLAYER'){ this.behaviorFollow(target); } else if(this.mode==='EXPLORING'){ this.behaviorWander(); } else if(this.mode==='ENGAGING' && target){ if(this.aiType==='AGGRESSOR'){ this.behaviorAttack(target); } else if(this.aiType==='DECEIVER'){ const dist=Math.hypot(target.x-this.x, target.y-this.y); if(this.angryTimer>0){ this.angryTimer--; this.behaviorAttack(target); if(this.betrayalTimer>0){ this.betrayalTimer--; if(dist<300){ const a=Math.atan2(this.y-target.y, this.x-target.x); this.x+=Math.cos(a)*this.speed*0.5; this.y+=Math.sin(a)*this.speed*0.5; } } } else { this.behaviorSignal(target); this.checkAlliance(allUnits); if(this.allianceProgress>1500){ this.showEmoji("😂👉🤡",120); this.isSignaling=false; this.allianceProgress=0; this.allianceTarget=null; this.angryTimer=300; this.betrayalTimer=300; this.lastShotTime=0; if(isPeaceTime){ this.mode='EXPLORING'; const a=Math.atan2(this.y-target.y, this.x-target.x); this.wanderDest={x:this.x+Math.cos(a)*2000, y:this.y+Math.sin(a)*2000}; this.wanderTimer=1000; this.emojiTimer=0; } } } } else if(this.aiType==='PACIFIST'){ const hasAlly = this.squad.members.length>1; if(this.provoked || hasAlly){ if(target.isSignaling){ this.behaviorSignal(target); this.checkAlliance(allUnits); } else { this.behaviorAttack(target); } } else { this.behaviorSignal(target); this.checkAlliance(allUnits); } } } this.x=Math.max(20,Math.min(this.x,worldWidth-20)); this.y=Math.max(20,Math.min(this.y,worldHeight-20)); this.draw(); } behaviorWander(){ if(!this.wanderDest || this.wanderTimer<=0){ this.wanderDest={x:Math.random()*worldWidth, y:Math.random()*worldHeight}; this.wanderTimer=Math.random()*500+200; } this.wanderTimer--; const dx=this.wanderDest.x-this.x, dy=this.wanderDest.y-this.y; const dist=Math.hypot(dx,dy); if(dist>50){ this.angle=Math.atan2(dy,dx); this.x+=Math.cos(this.angle)*this.speed*0.8; this.y+=Math.sin(this.angle)*this.speed*0.8; } else { this.wanderDest=null; } } behaviorAttack(target){ this.angle=Math.atan2(target.y-this.y, target.x-this.x); this.attackTimer--; let distToDest=0; if(this.attackDest){ distToDest=Math.hypot(this.attackDest.x-this.x, this.attackDest.y-this.y); } if(this.attackTimer<=0 || !this.attackDest || distToDest<10){ const range=50+Math.random()*550, theta=Math.random()*Math.PI*2; this.attackDest={ x: target.x + Math.cos(theta)*range, y: target.y + Math.sin(theta)*range }; this.attackTimer=30+Math.random()*60; } const mAng=Math.atan2(this.attackDest.y-this.y, this.attackDest.x-this.x); this.x+=Math.cos(mAng)*this.speed; this.y+=Math.sin(mAng)*this.speed; if(this.ammo>0) this.tryShoot(); } behaviorSignal(target){ this.isSignaling=true; const dx=target.x-this.x, dy=target.y-this.y; const dist=Math.hypot(dx,dy); this.angle=Math.atan2(dy,dx); if(target.isSignaling){ if(dist>120){ this.x+=Math.cos(this.angle)*this.speed*0.6; this.y+=Math.sin(this.angle)*this.speed*0.6; } else if(dist<80){ this.x-=Math.cos(this.angle)*this.speed*0.6; this.y-=Math.sin(this.angle)*this.speed*0.6; } const t=Date.now()*0.0005; const sx=Math.cos(t), sy=Math.sin(t); this.x+=sx*this.speed*0.5; this.y+=sy*this.speed*0.5; } else { if(dist>150){ this.x+=Math.cos(this.angle)*this.speed*0.6; this.y+=Math.sin(this.angle)*this.speed*0.6; } } } behaviorFollow(enemyTarget){ const d=Math.hypot(player.x-this.x, player.y-this.y); if(d>100){ const a=Math.atan2(player.y-this.y, player.x-this.x); this.x+=Math.cos(a)*this.speed*1.3; this.y+=Math.sin(a)*this.speed*1.3; } if(enemyTarget && !isPeaceTime){ this.angle=Math.atan2(enemyTarget.y-this.y, enemyTarget.x-this.x); if(this.ammo>0) this.tryShoot(); } else{ this.angle=Math.atan2(player.y-this.y, player.x-this.x); } } tryShoot(){ if(this.aiType==='PACIFIST' && !(this.provoked || this.squad.members.length>1)) return; if(isPeaceTime) return; const now=Date.now(); if(now-this.lastShotTime>this.shootInterval){ let aiCanShoot=true; if(this.squad.members.includes(player)){ if(this.ammo%2!==0) aiCanShoot=false; } if(aiCanShoot && this.consumeAmmo()){ const velocity={x:Math.cos(this.angle)*9, y:Math.sin(this.angle)*9}; projectiles.push(new Projectile(this.x,this.y,4,'#ff5252',velocity,this.squad)); flashes.push(new MuzzleFlash(this.x,this.y)); this.lastShotTime=now; this.shootInterval=Math.random()*1000+500; playSound('shoot'); } } } draw(){ ctx.save(); ctx.translate(this.x,this.y); this.drawSignal(); this.drawHealth(ctx); this.drawAllianceBar(ctx); ctx.rotate(this.angle); ctx.beginPath(); ctx.arc(0,0,this.radius,0,Math.PI*2); ctx.fillStyle=(this.squad===player.squad)?'#00e676':this.baseColor; ctx.fill(); ctx.fillStyle='#555'; ctx.fillRect(-5,-5,10,10); ctx.fillStyle='#000'; ctx.fillRect(5,-2,12,4); ctx.restore(); } }
+
+    let trees=[], player, enemies=[], projectiles=[], particles=[], flashes=[];
+    let aliveCount=0;
+
+    function init(mode='survival'){
+        resize(); initTrees();
+        gameMode=mode; enemies=[]; projectiles=[]; particles=[]; flashes=[]; score=0;
+        statSignaledIds=new Set(); statAlliances=0; statBetrayals=0;
+        energyMaxMs = ENERGY_BASE_MS;
+        energyMs = ENERGY_BASE_MS;
+        lastFrameTime = performance.now();
+        energyDepleteTimer = 0;
+        echoWaves = [];
+        isPaused = false;
+        pauseMenu.style.display = 'none';
+        settingsBtn.style.display = 'flex';
+        // 重置广播状态
+        visitedMilestones.clear();
+        broadcastBanner.classList.remove('active');
+        broadcastBanner.innerText = "";
+        
+        if(firstEchoTimeoutId){ clearTimeout(firstEchoTimeoutId); firstEchoTimeoutId=null; }
+        if(echoIntervalId){ clearInterval(echoIntervalId); echoIntervalId=null; }
+        updateEnergyUI();
+        uiLayer.classList.remove('hidden');
+        if(gameMode==='tutorial'){
+            player=new Player(worldWidth/2, worldHeight/2);
+            initTutorial(); updateTutorialUI();
+            peaceTimerEl.style.display='none'; survivorEl.parentElement.style.display='none';
+        }else{
+            player=new Player(worldWidth/2, worldHeight/2);
+            isPeaceTime=true; peaceTimeRemaining=10;
+            spawnInitialEnemies(); startPeaceTimer();
+            peaceTimerEl.style.display='block'; survivorEl.parentElement.style.display='block'; tutorialInstructionEl.style.display='none';
+            const totalEnemies=gameConfig.aiCounts.AGGRESSOR+gameConfig.aiCounts.DECEIVER+gameConfig.aiCounts.PACIFIST;
+            aliveCount=totalEnemies+1; survivorEl.innerText=aliveCount;
+        }
+        updateUI();
+    }
+    function initTutorial(){ isPeaceTime=false; peaceTimerEl.style.display='none'; survivorEl.parentElement.style.display='none'; tutorialState={ step:0, movedDist:0, targetsHit:0, targetsNeeded:3, startPos:null }; tutorialTargets=[]; tutorialInstructionEl.style.display='block'; energyMaxMs = 8000; energyMs = 8000; energyDepleteTimer = 0; updateEnergyUI(); }
+    function updateTutorialUI(){ let text="", done=false; switch(tutorialState.step){ case 0: text="使用 WASD 或 左摇杆 移动\n注意能源条在衰减，归零后会掉血"; break; case 1: text=`鼠标右键 或 右摇杆 射击靶子 (${tutorialState.targetsHit}/${tutorialState.targetsNeeded})\n击杀会立即补满能源`; break; case 2: text="按住左键 或 示好按钮 向友军示好\n保持连接直到结盟，结盟增加上限"; break; case 3: text="结盟成功！血量与子弹上限翻倍！\n准备进入黑暗森林。"; done=true; setTimeout(()=>{ isTutorialCompleted=true; softResetToMenu(); }, 4000); break; } tutorialInstructionEl.innerHTML=text; if(done) tutorialInstructionEl.classList.add('instruction-complete'); else tutorialInstructionEl.classList.remove('instruction-complete'); }
+    function spawnTutorialTargets(){ for(let i=0;i<3;i++){ const angle=(Math.PI*2/3)*i, dist=300, tx=player.x+Math.cos(angle)*dist, ty=player.y+Math.sin(angle)*dist; const dummy=new Enemy(tx,ty,'AGGRESSOR'); dummy.isTutorialTarget=true; dummy.baseColor='#ffb74d'; dummy.health=1; dummy.maxHealth=1; enemies.push(dummy); } }
+    function spawnTutorialFriend(){ const friend=new Enemy(player.x+300, player.y, 'PACIFIST'); friend.baseColor='#42a5f5'; enemies.push(friend); }
+    function completeTutorial(){ tutorialState.step=3; updateTutorialUI(); }
+    function initTrees(){ trees=[]; const count=(worldWidth*worldHeight)/30000; for(let i=0;i<count;i++){ trees.push(new Tree(Math.random()*worldWidth, Math.random()*worldHeight, Math.random()*30+20)); } }
+    function spawnInitialEnemies(){ enemyStatusBar.innerHTML=''; let types=[]; for(let i=0;i<gameConfig.aiCounts.AGGRESSOR;i++) types.push('AGGRESSOR'); for(let i=0;i<gameConfig.aiCounts.DECEIVER;i++) types.push('DECEIVER'); for(let i=0;i<gameConfig.aiCounts.PACIFIST;i++) types.push('PACIFIST'); for(let i=types.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [types[i],types[j]]=[types[j],types[i]]; } const totalAI=types.length; for(let i=0;i<totalAI;i++){ let x,y,dist,attempts=0; do{ x=Math.random()*(worldWidth-200)+100; y=Math.random()*(worldHeight-200)+100; dist=Math.hypot(x-player.x, y-player.y); attempts++; } while(dist<1000 && attempts<50); const enemy=new Enemy(x,y,types[i]); enemies.push(enemy); const icon=document.createElement('div'); icon.className='status-icon'; icon.style.backgroundColor=enemy.baseColor; icon.id='status-'+enemy.uid; enemyStatusBar.appendChild(icon); } }
+    function startPeaceTimer(){ peaceTimerEl.style.display='block'; peaceTimerEl.style.opacity=1; peaceTimerEl.style.color="#4caf50"; peaceTimerEl.style.borderColor="#4caf50"; peaceTimerEl.innerText = `和平时间: ${peaceTimeRemaining}s 后可以开枪`; peaceTimerEl.className=''; if(peaceIntervalId) clearInterval(peaceIntervalId); peaceIntervalId=setInterval(()=>{ if (isPaused) return; peaceTimeRemaining--; if(peaceTimeRemaining>0){ peaceTimerEl.innerText=`和平时间: ${peaceTimeRemaining}s 后可以开枪`; } else{ isPeaceTime=false; peaceTimerEl.innerText="开火许可已授权!"; peaceTimerEl.className='fire-allowed-anim'; clearInterval(peaceIntervalId); if(firstEchoTimeoutId){ clearTimeout(firstEchoTimeoutId); } firstEchoTimeoutId = setTimeout(()=>{ triggerCosmicEcho(); echoIntervalId = setInterval(triggerCosmicEcho, ECHO_INTERVAL); }, ECHO_FIRST_DELAY); } },1000); }
+    function updateUI(){ ammoCountEl.innerText = player.ammo; ammoVisualsEl.innerHTML=''; for(let i=0;i<player.ammo;i++){ const d=document.createElement('div'); d.className='ammo-icon'; ammoVisualsEl.appendChild(d); } playerHealthUi.innerHTML=''; const maxH=player.maxHealth, curH=player.health; if(maxH > 20) { playerHealthUi.style.width = '200px'; playerHealthUi.innerHTML = `<div style="width:${(curH/maxH)*100}%; height:100%; background-color:#2e7d32; transition:width 0.3s;"></div>`; } else { playerHealthUi.style.width=(Math.min(maxH*30, 200))+'px'; for(let i=0;i<maxH;i++){ const div=document.createElement('div'); div.className='health-segment'+(i<curH?' active':''); playerHealthUi.appendChild(div); } } }
+    function checkVictory(){ const hostile=enemies.filter(e=>e.squad!==player.squad).length; if(hostile===0){ gameWin(); } }
+    function getRandomQuote(){ return quotes[Math.floor(Math.random()*quotes.length)]; }
+    function updateEndStats(){ statSignalEl.innerText=statSignaledIds.size; statAllianceEl.innerText=statAlliances; statBetrayalEl.innerText=statBetrayals; endQuoteEl.innerHTML=`“${getRandomQuote()}”<br><br><span style='font-size: 0.8em;'>——《三体》</span>`; }
+    function gameWin(){ gameRunning=false; menuOverlay.classList.remove('hidden'); pageTitle.classList.add('hidden'); pageRules.classList.add('hidden'); pageControls.classList.add('hidden'); pageGameOver.classList.remove('hidden'); pageGodMode.classList.add('hidden'); endTitle.innerText="文明延续"; endTitle.className='victory-text'; finalScoreEl.innerText=`最终幸存者分数: ${score}`; restartBtn.innerText="重启文明"; updateEndStats(); clearInterval(peaceIntervalId); }
+    function gameOver(){ gameRunning=false; menuOverlay.classList.remove('hidden'); pageTitle.classList.add('hidden'); pageRules.classList.add('hidden'); pageControls.classList.add('hidden'); pageGameOver.classList.remove('hidden'); pageGodMode.classList.add('hidden'); endTitle.innerText="文明灭亡了"; endTitle.className='defeat-text'; finalScoreEl.style.display='none'; restartBtn.innerText="重启文明"; updateEndStats(); clearInterval(peaceIntervalId); }
+
+    // === 新增：触发世界广播 ===
+    function showWorldBroadcast(text) {
+        broadcastBanner.innerText = text;
+        broadcastBanner.classList.remove('active');
+        void broadcastBanner.offsetWidth; // 触发重绘，重启动画
+        broadcastBanner.classList.add('active');
+        // 5秒后自动隐藏（虽然动画会自动淡出，但移除class更保险）
+        setTimeout(() => {
+            if (broadcastBanner.innerText === text) {
+                broadcastBanner.classList.remove('active');
+            }
+        }, 5000);
+    }
+
+    function checkBroadcast(currentCount) {
+        if (broadcastMilestones.includes(currentCount) && !visitedMilestones.has(currentCount)) {
+            visitedMilestones.add(currentCount);
+            // 随机选取一句
+            const quote = getRandomQuote();
+            showWorldBroadcast(`${quote}`);
+            playSound('alliance'); // 使用结盟音效作为提示音，或者你可以添加专门的广播音效
+        }
+    }
+
+    function animate(){
+        if(!gameRunning) return;
+        requestAnimationFrame(animate);
+
+        if (isPaused) return;
+
+        const now = performance.now();
+        let dt = now - lastFrameTime;
+        if(!Number.isFinite(dt) || dt<0) dt = 0;
+        dt = Math.min(dt, 200); 
+        lastFrameTime = now;
+        updateEnergy(dt);
+        updateEnergyUI();
+
+        camera.x = player.x - canvas.width/2; camera.y = player.y - canvas.height/2;
+        camera.x = Math.max(0, Math.min(camera.x, worldWidth - canvas.width));
+        camera.y = Math.max(0, Math.min(camera.y, worldHeight - canvas.height));
+
+        ctx.fillStyle='#0b0f0b'; ctx.fillRect(0,0,canvas.width,canvas.height);
+
+        ctx.save();
+        ctx.translate(-camera.x, -camera.y);
+
+        trees.forEach(t=>{ if(t.x>camera.x-50 && t.x<camera.x+canvas.width+50 && t.y>camera.y-50 && t.y<camera.y+canvas.height+50) t.draw(); });
+
+        flashes.forEach((f,i)=>{ f.update(); f.draw(ctx); if(f.life<=0) flashes.splice(i,1); });
+
+        const allUnits=[player, ...enemies];
+        allUnits.forEach(u=>{ if(u.allianceTarget){ ctx.beginPath(); ctx.moveTo(u.x,u.y); ctx.lineTo(u.allianceTarget.x,u.allianceTarget.y); ctx.strokeStyle='#00e676'; ctx.lineWidth=(u.allianceProgress/3000)*10+1; ctx.stroke(); } });
+
+        player.update(enemies);
+        enemies.forEach(e=>e.update(allUnits));
+
+        particles.forEach((p,i)=>{ p.update(); if(p.alpha<=0) particles.splice(i,1); });
+
+        for(let i=projectiles.length-1;i>=0;i--){
+            const p=projectiles[i]; p.update();
+            if(p.x<0 || p.x>worldWidth || p.y<0 || p.y>worldHeight){ projectiles.splice(i,1); continue; }
+            let hit=false;
+
+            if(gameMode==='tutorial' && tutorialState.step===1){
+                for(let unit of enemies){
+                    if(p.ownerSquad===unit.squad) continue;
+                    if(!unit.isTutorialTarget) continue;
+                    const dist=Math.hypot(p.x-unit.x, p.y-unit.y);
+                    if(dist<unit.radius+p.radius){
+                        unit.takeDamage(100);
+                        createExplosion(unit.x,unit.y,'#ffb74d',10); hit=true;
+                        if(unit.health<=0){
+                            const idx=enemies.indexOf(unit); if(idx>-1) enemies.splice(idx,1);
+                            refillEnergyFull(); 
+                            tutorialState.targetsHit++; updateTutorialUI();
+                            if(tutorialState.targetsHit>=tutorialState.targetsNeeded){ tutorialState.step=2; updateTutorialUI(); spawnTutorialFriend(); }
+                        }
+                        break;
+                    }
+                }
+            } else {
+                const all=[player, ...enemies];
+                for(let unit of all){
+                    if(p.ownerSquad===unit.squad) continue;
+                    const dist=Math.hypot(p.x-unit.x, p.y-unit.y);
+                    if(dist<unit.radius+p.radius){
+                        unit.takeDamage(1); createExplosion(unit.x,unit.y,'#f44336',10); hit=true;
+                        if(unit.health<=0){
+                            const killerIsPlayerSquad = p.ownerSquad && p.ownerSquad.members.includes(player);
+                            const killerIsDeceiver = p.ownerSquad.members.some(m=>m instanceof Enemy && m.aiType==='DECEIVER');
+                            if(killerIsDeceiver) statBetrayals++;
+                            if(unit===player){ gameOver(); }
+                            else{
+                                unit.squad.members.forEach(m=>{
+                                    if(m===unit && m instanceof Enemy){
+                                        const icon=document.getElementById('status-'+m.uid);
+                                        if(icon) icon.classList.add('dead');
+                                        const eIdx=enemies.indexOf(m); if(eIdx>-1) enemies.splice(eIdx,1);
+                                        createExplosion(m.x,m.y,'#d32f2f',20); score+=100;
+                                        if(killerIsPlayerSquad){ refillEnergyFull(); }
+                                    }
+                                });
+                                // === 关键逻辑：检测存活人数并触发广播 ===
+                                if(gameMode==='survival'){ 
+                                    aliveCount=enemies.length+1; 
+                                    survivorEl.innerText=aliveCount; 
+                                    checkBroadcast(aliveCount); // 检查是否触发广播
+                                    checkVictory(); 
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            if(hit) projectiles.splice(i,1);
+        }
+
+        if(echoWaves.length>0){
+            ctx.save(); ctx.translate(worldWidth/2, worldHeight/2);
+            echoWaves.forEach(wv=>{ ctx.beginPath(); ctx.arc(0,0,wv.radius,0,Math.PI*2); ctx.strokeStyle=`rgba(0,255,255,${wv.alpha.toFixed(3)})`; ctx.lineWidth=6; ctx.stroke(); });
+            ctx.restore(); updateEchoWaves(dt);
+        }
+        ctx.restore();
+        if(gameMode==='survival' && aliveCount<=3 && aliveCount>1){
+            const cx=canvas.width/2, cy=canvas.height/2, radius=Math.min(cx,cy)-60;
+            enemies.forEach(t=>{ const ang=Math.atan2(t.y-player.y, t.x-player.x); ctx.save(); ctx.translate(cx,cy); ctx.rotate(ang); ctx.translate(radius,0); ctx.beginPath(); ctx.moveTo(15,0); ctx.lineTo(-15,-10); ctx.lineTo(-15,10); ctx.closePath(); ctx.fillStyle=(t.squad===player.squad)?'#00e676':'#ff5252'; ctx.fill(); ctx.restore(); });
+        }
+        renderMinimap(); updateUI();
+    }
+
+    function createExplosion(x,y,color,count){ for(let i=0;i<count;i++){ particles.push(new Particle(x,y,Math.random()*3,color,{x:(Math.random()-0.5)*8, y:(Math.random()-0.5)*8})); } }
+    
+    // === 修改后的 renderMinimap 函数：新手教程强制显示敌人 ===
+    function renderMinimap(){ 
+        const w = minimapCanvas.width, h = minimapCanvas.height; 
+        mmCtx.clearRect(0,0,w,h); 
+        if(minimapWrap.style.display === 'none') return; 
+        
+        mmCtx.fillStyle='rgba(5,12,14,0.9)'; mmCtx.fillRect(0,0,w,h); 
+        mmCtx.strokeStyle='rgba(0,255,255,0.25)'; mmCtx.strokeRect(0.5,0.5,w-1,h-1); 
+        
+        const sx = w / worldWidth, sy = h / worldHeight; 
+        mmCtx.globalAlpha = 0.35; mmCtx.strokeStyle='rgba(255,255,255,0.6)'; mmCtx.lineWidth=1; 
+        const vw = canvas.width * sx, vh = canvas.height * sy; 
+        const vx = camera.x * sx, vy = camera.y * sy; 
+        mmCtx.strokeRect(vx, vy, vw, vh); 
+        mmCtx.globalAlpha = 1.0; 
+        
+        const px = player.x * sx, py = player.y * sy; 
+        mmCtx.fillStyle='#00e676'; mmCtx.beginPath(); mmCtx.arc(px, py, 3.2, 0, Math.PI*2); mmCtx.fill(); 
+        
+        const alliesOnly = !echoRevealActive; 
+        enemies.forEach(e=>{ 
+            const ex = e.x * sx, ey = e.y * sy; 
+            const isAlly = (e.squad === player.squad); 
+            // 修改点：如果不在新手教程中，才执行“仅显示盟友”的限制
+            if(gameMode !== 'tutorial' && alliesOnly && !isAlly) return; 
+            
+            mmCtx.fillStyle = isAlly ? '#00e676' : '#ff5252'; 
+            mmCtx.beginPath(); mmCtx.arc(ex, ey, 2.6, 0, Math.PI*2); mmCtx.fill(); 
+        }); 
+    }
+
+    function triggerCosmicEcho(){ refillEnergyFull(); echoRevealActive = true; echoWaves.push({ radius:0, alpha:1 }); echoBanner.classList.add('show'); setTimeout(()=>echoBanner.classList.remove('show'), 1200); setTimeout(()=>{ echoRevealActive=false; }, 5000); playSound('echo'); }
+    function updateEchoWaves(dt){ const maxRadius = Math.hypot(worldWidth, worldHeight); for(let i=echoWaves.length-1;i>=0;i--){ const wv = echoWaves[i]; wv.radius += ECHO_WAVE_SPEED * (dt/1000); wv.alpha -= ECHO_WAVE_FADE * (dt/1000); if(wv.radius>maxRadius || wv.alpha<=0){ echoWaves.splice(i,1); } } }
+    function updateEnergy(dt){ energyMs = Math.max(0, energyMs - dt); if (energyMs <= 0){ energyDepleteTimer += dt; while(energyDepleteTimer >= ENERGY_HEALTH_TICK_MS && player && player.health>0){ player.takeDamage(1); energyDepleteTimer -= ENERGY_HEALTH_TICK_MS; if(player.health<=0){ gameOver(); break; } } } else { energyDepleteTimer = 0; } }
+    function refillEnergyFull(){ energyMs = energyMaxMs; energyDepleteTimer = 0; }
+    function gainEnergyCapacityBonus(){ energyMaxMs += ENERGY_ALLIANCE_BONUS_MS; energyMs = energyMaxMs; energyDepleteTimer = 0; }
+    function updateEnergyUI(){ const ratio = energyMaxMs>0 ? energyMs / energyMaxMs : 0; energyBarFill.style.width = `${Math.max(0, Math.min(ratio,1))*100}%`; energyText.innerText = `${(energyMs/1000).toFixed(1)}s / ${(energyMaxMs/1000).toFixed(1)}s`; const minRadius = ratio <= 0 ? 12 : 12; const clearRadius = Math.max(minRadius, ratio * 100); energyVignette.style.background = `radial-gradient(circle at 50% 50%, rgba(0,0,0,0) ${clearRadius}%, rgba(0,0,0,1) ${clearRadius+0.5}%)`; energyVignette.style.opacity = 1; }
+
+    const mobileControls = document.getElementById('mobile-controls');
+    const stickLeft = document.getElementById('stick-left');
+    const stickRight = document.getElementById('stick-right');
+    const signalBtn = document.getElementById('mobile-signal-btn');
+    let rightStickFireTimer = null;
+    function isTouchDevice() { return (('ontouchstart' in window) || (navigator.maxTouchPoints > 0)); }
+    if (isTouchDevice()) { mobileControls.style.display = 'block'; }
+    function handleJoystick(touch, stickEl, callback) { const rect = stickEl.getBoundingClientRect(); const centerX = rect.left + rect.width / 2; const centerY = rect.top + rect.height / 2; const maxDist = rect.width / 2; let dx = touch.clientX - centerX; let dy = touch.clientY - centerY; const dist = Math.hypot(dx, dy); const knob = stickEl.querySelector('.joystick-knob'); const limitDist = Math.min(dist, maxDist); const angle = Math.atan2(dy, dx); const kx = Math.cos(angle) * limitDist; const ky = Math.sin(angle) * limitDist; knob.style.transform = `translate(${kx}px, ${ky}px)`; callback(kx / maxDist, ky / maxDist, limitDist / maxDist, angle); }
+    function resetJoystick(stickEl) { const knob = stickEl.querySelector('.joystick-knob'); knob.style.transform = `translate(0px, 0px)`; }
+    stickLeft.addEventListener('touchstart', e => { if(isPaused) return; handleMove(e); });
+    stickLeft.addEventListener('touchmove', e => { if(isPaused) return; e.preventDefault(); handleMove(e); });
+    stickLeft.addEventListener('touchend', () => { resetJoystick(stickLeft); keys.w = false; keys.s = false; keys.a = false; keys.d = false; });
+    function handleMove(e) { const touch = e.targetTouches[0]; handleJoystick(touch, stickLeft, (x, y, strength) => { if (strength > 0.2) { keys.w = y < -0.3; keys.s = y > 0.3; keys.a = x < -0.3; keys.d = x > 0.3; } else { keys.w = false; keys.s = false; keys.a = false; keys.d = false; } if (onTitleScreen) goToNextPage(); }); }
+    stickRight.addEventListener('touchstart', e => { if(isPaused) return; handleAim(e); });
+    stickRight.addEventListener('touchmove', e => { if(isPaused) return; e.preventDefault(); handleAim(e); });
+    stickRight.addEventListener('touchend', () => { resetJoystick(stickRight); if(rightStickFireTimer) { clearInterval(rightStickFireTimer); rightStickFireTimer = null; } });
+    function handleAim(e) { const touch = e.targetTouches[0]; handleJoystick(touch, stickRight, (x, y, strength, angle) => { const centerOffsetX = Math.cos(angle) * 200; const centerOffsetY = Math.sin(angle) * 200; mouse.x = (canvas.width / 2) + centerOffsetX; mouse.y = (canvas.height / 2) + centerOffsetY; if (strength > 0.9) { if (!rightStickFireTimer) { tryMobileShoot(); rightStickFireTimer = setInterval(tryMobileShoot, 300); } } else { if (rightStickFireTimer) { clearInterval(rightStickFireTimer); rightStickFireTimer = null; } } }); }
+    function tryMobileShoot() { if(isPaused) return; const event = new MouseEvent('mousedown', { 'view': window, 'bubbles': true, 'cancelable': true, 'button': 2 }); window.dispatchEvent(event); }
+    signalBtn.addEventListener('touchstart', (e) => { if(isPaused) return; e.preventDefault(); isSignalDown = true; signalBtn.style.background = "rgba(0, 230, 118, 0.6)"; signalBtn.style.color = "#fff"; if (onTitleScreen) goToNextPage(); });
+    signalBtn.addEventListener('touchend', (e) => { e.preventDefault(); isSignalDown = false; signalBtn.style.background = "rgba(0, 230, 118, 0.2)"; signalBtn.style.color = "#00e676"; });
+});
+</script>
+</body>
+</html>
