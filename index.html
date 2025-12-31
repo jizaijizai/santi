@@ -2,12 +2,10 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <!-- 关键修改：viewport-fit=cover 适配刘海屏，禁止缩放 -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>猜疑链：黑暗森林</title>
     <style>
         :root {
-            /* 定义颜色变量 */
             --color-primary: #00e676;
             --color-danger: #ff5252;
             --color-bg-overlay: rgba(0, 0, 0, 0.95);
@@ -17,16 +15,14 @@
             margin: 0;
             padding: 0;
             background-color: #0b0f0b;
-            overflow: hidden; /* 禁止 body 滚动 */
+            overflow: hidden;
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             color: #ccc;
             user-select: none;
             -webkit-user-select: none;
-            /* 关键：禁止全局默认触摸行为（防止拖动游戏画布），但允许特定区域覆盖此设置 */
             touch-action: none; 
             width: 100vw;
             height: 100vh;
-            /* 适配移动端安全区域，电脑端不受影响（值为0px） */
             padding-left: env(safe-area-inset-left);
             padding-right: env(safe-area-inset-right);
             box-sizing: border-box;
@@ -34,13 +30,12 @@
         
         canvas { display: block; }
 
-        /* 通用滚动条样式 (Webkit) */
         ::-webkit-scrollbar { width: 6px; }
         ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
         ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.3); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.5); }
 
-        /* 横屏强制提示 - 优化：仅在移动设备宽度下显示，防止电脑窗口调整时误触 */
+        /* === 修复核心：横屏强制提示 === */
         #landscape-lock {
             display: none;
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -51,8 +46,12 @@
         #landscape-lock svg { width: 64px; height: 64px; margin-bottom: 20px; fill: #fff; animation: rotate-phone 2s infinite; }
         @keyframes rotate-phone { 0%, 10% { transform: rotate(0deg); } 40%, 60% { transform: rotate(-90deg); } 90%, 100% { transform: rotate(0deg); } }
         
-        /* 仅在竖屏 且 屏幕宽度小于 1024px (通常是平板/手机) 时显示 */
-        @media screen and (orientation: portrait) and (max-width: 1024px) {
+        /* 修复说明：
+           将 max-width 这里的阈值从 1024px 修改为 900px。
+           大部分手机浏览器的“电脑模式”视口宽度为 980px。
+           修改后：980px (电脑模式) > 900px，因此不会命中此规则，不会显示锁定层。
+        */
+        @media screen and (orientation: portrait) and (max-width: 900px) {
             #landscape-lock { display: flex; }
         }
 
@@ -64,14 +63,12 @@
             z-index: 10;
         }
 
-        /* 顶部 HUD */
         #top-hud {
             width: 100%; display: flex; flex-direction: column; align-items: center;
-            padding-top: max(10px, env(safe-area-inset-top)); /* 适配顶部刘海 */
+            padding-top: max(10px, env(safe-area-inset-top));
             pointer-events: none;
         }
 
-        /* 设置按钮 */
         #settings-btn {
             position: absolute; top: max(15px, env(safe-area-inset-top)); right: max(15px, env(safe-area-inset-right));
             width: 44px; height: 44px;
@@ -84,10 +81,9 @@
         }
         #settings-btn:hover { background: #fff; color: #000; transform: rotate(90deg); }
 
-        /* 核心计时器 */
         #peace-timer {
             position: absolute; top: 15%; left: 50%; transform: translate(-50%, -50%);
-            font-size: clamp(16px, 4vw, 24px); /* 响应式字体 */
+            font-size: clamp(16px, 4vw, 24px);
             color: #4caf50; font-weight: bold;
             text-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
             background-color: rgba(0,0,0,0.6);
@@ -101,7 +97,7 @@
             text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
             margin-top: 10px; background-color: rgba(0,0,0,0.8);
             padding: 10px 15px; border-radius: 5px; border-left: 4px solid #4caf50;
-            transition: all 0.3s; display: none; text-align: center; white-space: pre-wrap; /* 允许换行 */
+            transition: all 0.3s; display: none; text-align: center; white-space: pre-wrap;
             max-width: 80%;
         }
         .instruction-complete { color: var(--color-primary) !important; border-color: var(--color-primary) !important; transform: scale(1.05); }
@@ -133,7 +129,6 @@
             font-size: clamp(14px, 3.5vw, 20px); font-weight: bold; color: #e0e0e0; text-shadow: 2px 2px 0px #000;
         }
 
-        /* 状态面板 */
         .status-panel {
             position: fixed; top: max(60px, calc(env(safe-area-inset-top) + 40px)); left: max(15px, env(safe-area-inset-left));
             display: flex; flex-direction: column; gap: 5px; z-index: 5;
@@ -156,7 +151,6 @@
         .reload-text.visible { opacity: 1; animation: pulse-text 1.5s infinite; }
         @keyframes pulse-text { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
 
-        /* === 广播系统样式 === */
         #game-broadcast {
             position: absolute;
             top: 15%;
@@ -172,13 +166,10 @@
             opacity: 0;
             z-index: 80;
             transition: opacity 0.5s ease-in-out;
-            font-family: "SimSun", "Songti SC", serif; /* 使用衬线体更有史诗感 */
+            font-family: "SimSun", "Songti SC", serif;
             letter-spacing: 2px;
         }
-        #game-broadcast.active {
-            opacity: 1;
-            animation: broadcast-pulse 4s forwards;
-        }
+        #game-broadcast.active { opacity: 1; animation: broadcast-pulse 4s forwards; }
         @keyframes broadcast-pulse {
             0% { transform: translate(-50%, -60%); opacity: 0; }
             10% { transform: translate(-50%, -50%); opacity: 1; }
@@ -194,7 +185,6 @@
         }
         #cosmic-echo-banner.show { opacity:1; }
 
-        /* === 菜单与页面容器 === */
         #menu-overlay, #pause-menu {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
             background: var(--color-bg-overlay);
@@ -299,7 +289,6 @@
 
         #energy-vignette{ position: fixed; inset: 0; pointer-events: none; z-index: 2; background: radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 80%, rgba(0,0,0,0.7) 100%); opacity: 0; transition: opacity 0.1s linear; }
 
-        /* 移动端控制器 - 默认隐藏，JS检测到触摸屏后开启 */
         #mobile-controls { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
         .joystick-zone { position: absolute; bottom: max(30px, env(safe-area-inset-bottom)); width: 110px; height: 110px; background: rgba(255, 255, 255, 0.05); border: 2px solid rgba(255, 255, 255, 0.2); border-radius: 50%; pointer-events: auto; display: flex; justify-content: center; align-items: center; }
         #stick-left { left: max(30px, env(safe-area-inset-left)); }
@@ -321,7 +310,7 @@
         <button id="settings-btn">⚙️</button>
         <div id="top-hud">
             <div id="peace-timer">和平时间: 10s</div>
-            <!-- 广播横幅 -->
+            <!-- 新增广播显示区域 -->
             <div id="game-broadcast"></div>
             <div id="tutorial-instruction"></div>
             <div id="enemy-status-bar"></div>
@@ -424,10 +413,22 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    // 允许菜单区域触摸滚动，但在 body 层面防止整体拖动
     document.addEventListener('touchmove', function(e) { if (!e.target.closest('#menu-overlay') && !e.target.closest('#pause-menu')) { e.preventDefault(); } }, { passive: false });
-    // 防止双击缩放
     document.addEventListener('dblclick', function(event) { event.preventDefault(); }, { passive: false });
+
+    // === 核心逻辑修复：主动检测桌面环境并移除遮罩 ===
+    // 如果浏览器UA包含Windows/Mac/Linux且没有Mobile字样，或者屏幕宽度大于900，强制隐藏锁定层
+    function checkDesktopEnv() {
+        const isDesktop = !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        const isLargeScreen = window.innerWidth > 900;
+        if (isDesktop || isLargeScreen) {
+            const lock = document.getElementById('landscape-lock');
+            if (lock) lock.style.display = 'none';
+        }
+    }
+    // 初始化和调整窗口时都运行一次
+    checkDesktopEnv();
+    window.addEventListener('resize', checkDesktopEnv);
 
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
@@ -510,9 +511,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let tutorialState = { step: 0, movedDist: 0, targetsHit: 0, targetsNeeded: 3, startPos: null };
     let tutorialTargets = [];
 
-    // 广播系统变量
+    // === 广播系统相关变量 ===
     const broadcastMilestones = [23, 13, 8, 3];
     let visitedMilestones = new Set();
+    // 经典语录库
     const quotes = [
         "宇宙就是一座黑暗森林，每个文明都是带枪的猎人。",
         "在猜疑链中，善意是最奢侈的赌注。",
@@ -583,7 +585,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let inputSequence = "";
     let onTitleScreen = true;
 
-    // === PC 端键盘监听 (WASD) ===
     window.addEventListener('keydown', (e) => {
         if (onTitleScreen && !pageTitle.classList.contains('hidden')) { goToNextPage(); return; }
         if (document.activeElement === secretInput || document.activeElement === settingSecretInput) return;
@@ -600,12 +601,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); if (keys.hasOwnProperty(k)) keys[k] = false; });
-    
-    // === PC 端鼠标监听 (右键射击) ===
     window.onmousedown = (e) => {
         if (e.target === settingsBtn || isPaused) return;
         if (onTitleScreen && !pageTitle.classList.contains('hidden')) { goToNextPage(); } 
-        else if (e.button === 2) { // 鼠标右键
+        else if (e.button === 2) {
             if (!gameRunning || isPaused) return;
             if (gameMode === 'survival' && isPeaceTime) return;
             if (player.consumeAmmo()) {
@@ -617,7 +616,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 flashes.push(new MuzzleFlash(player.x, player.y));
                 playSound('shoot');
             }
-        } else if (e.button === 0) { // 鼠标左键
+        } else if (e.button === 0) {
             if (!gameRunning || isPaused) return;
             isSignalDown = true;
         }
