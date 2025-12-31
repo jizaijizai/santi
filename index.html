@@ -26,7 +26,7 @@
             touch-action: none; 
             width: 100vw;
             height: 100vh;
-            /* 适配安全区域 */
+            /* 适配移动端安全区域，电脑端不受影响（值为0px） */
             padding-left: env(safe-area-inset-left);
             padding-right: env(safe-area-inset-right);
             box-sizing: border-box;
@@ -40,7 +40,7 @@
         ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.3); border-radius: 3px; }
         ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.5); }
 
-        /* 横屏强制提示 */
+        /* 横屏强制提示 - 优化：仅在移动设备宽度下显示，防止电脑窗口调整时误触 */
         #landscape-lock {
             display: none;
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -51,8 +51,8 @@
         #landscape-lock svg { width: 64px; height: 64px; margin-bottom: 20px; fill: #fff; animation: rotate-phone 2s infinite; }
         @keyframes rotate-phone { 0%, 10% { transform: rotate(0deg); } 40%, 60% { transform: rotate(-90deg); } 90%, 100% { transform: rotate(0deg); } }
         
-        /* 竖屏且宽度小于高度时显示提示 */
-        @media screen and (orientation: portrait) {
+        /* 仅在竖屏 且 屏幕宽度小于 1024px (通常是平板/手机) 时显示 */
+        @media screen and (orientation: portrait) and (max-width: 1024px) {
             #landscape-lock { display: flex; }
         }
 
@@ -299,6 +299,7 @@
 
         #energy-vignette{ position: fixed; inset: 0; pointer-events: none; z-index: 2; background: radial-gradient(circle at 50% 50%, rgba(0,0,0,0) 80%, rgba(0,0,0,0.7) 100%); opacity: 0; transition: opacity 0.1s linear; }
 
+        /* 移动端控制器 - 默认隐藏，JS检测到触摸屏后开启 */
         #mobile-controls { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 100; }
         .joystick-zone { position: absolute; bottom: max(30px, env(safe-area-inset-bottom)); width: 110px; height: 110px; background: rgba(255, 255, 255, 0.05); border: 2px solid rgba(255, 255, 255, 0.2); border-radius: 50%; pointer-events: auto; display: flex; justify-content: center; align-items: center; }
         #stick-left { left: max(30px, env(safe-area-inset-left)); }
@@ -320,7 +321,7 @@
         <button id="settings-btn">⚙️</button>
         <div id="top-hud">
             <div id="peace-timer">和平时间: 10s</div>
-            <!-- 新增广播显示区域 -->
+            <!-- 广播横幅 -->
             <div id="game-broadcast"></div>
             <div id="tutorial-instruction"></div>
             <div id="enemy-status-bar"></div>
@@ -423,14 +424,16 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    // 允许菜单区域触摸滚动，但在 body 层面防止整体拖动
     document.addEventListener('touchmove', function(e) { if (!e.target.closest('#menu-overlay') && !e.target.closest('#pause-menu')) { e.preventDefault(); } }, { passive: false });
+    // 防止双击缩放
     document.addEventListener('dblclick', function(event) { event.preventDefault(); }, { passive: false });
 
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const uiLayer = document.getElementById('ui-layer');
     const echoBanner = document.getElementById('cosmic-echo-banner');
-    const broadcastBanner = document.getElementById('game-broadcast'); // 新增引用
+    const broadcastBanner = document.getElementById('game-broadcast'); 
     const minimapWrap = document.getElementById('minimap-wrapper');
     const minimapCanvas = document.getElementById('minimap');
     const mmCtx = minimapCanvas.getContext('2d');
@@ -507,10 +510,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let tutorialState = { step: 0, movedDist: 0, targetsHit: 0, targetsNeeded: 3, startPos: null };
     let tutorialTargets = [];
 
-    // === 广播系统相关变量 ===
+    // 广播系统变量
     const broadcastMilestones = [23, 13, 8, 3];
     let visitedMilestones = new Set();
-    // 经典语录库
     const quotes = [
         "宇宙就是一座黑暗森林，每个文明都是带枪的猎人。",
         "在猜疑链中，善意是最奢侈的赌注。",
@@ -581,6 +583,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let inputSequence = "";
     let onTitleScreen = true;
 
+    // === PC 端键盘监听 (WASD) ===
     window.addEventListener('keydown', (e) => {
         if (onTitleScreen && !pageTitle.classList.contains('hidden')) { goToNextPage(); return; }
         if (document.activeElement === secretInput || document.activeElement === settingSecretInput) return;
@@ -597,10 +600,12 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); if (keys.hasOwnProperty(k)) keys[k] = false; });
+    
+    // === PC 端鼠标监听 (右键射击) ===
     window.onmousedown = (e) => {
         if (e.target === settingsBtn || isPaused) return;
         if (onTitleScreen && !pageTitle.classList.contains('hidden')) { goToNextPage(); } 
-        else if (e.button === 2) {
+        else if (e.button === 2) { // 鼠标右键
             if (!gameRunning || isPaused) return;
             if (gameMode === 'survival' && isPeaceTime) return;
             if (player.consumeAmmo()) {
@@ -612,7 +617,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 flashes.push(new MuzzleFlash(player.x, player.y));
                 playSound('shoot');
             }
-        } else if (e.button === 0) {
+        } else if (e.button === 0) { // 鼠标左键
             if (!gameRunning || isPaused) return;
             isSignalDown = true;
         }
@@ -720,13 +725,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function gameWin(){ gameRunning=false; menuOverlay.classList.remove('hidden'); pageTitle.classList.add('hidden'); pageRules.classList.add('hidden'); pageControls.classList.add('hidden'); pageGameOver.classList.remove('hidden'); pageGodMode.classList.add('hidden'); endTitle.innerText="文明延续"; endTitle.className='victory-text'; finalScoreEl.innerText=`最终幸存者分数: ${score}`; restartBtn.innerText="重启文明"; updateEndStats(); clearInterval(peaceIntervalId); }
     function gameOver(){ gameRunning=false; menuOverlay.classList.remove('hidden'); pageTitle.classList.add('hidden'); pageRules.classList.add('hidden'); pageControls.classList.add('hidden'); pageGameOver.classList.remove('hidden'); pageGodMode.classList.add('hidden'); endTitle.innerText="文明灭亡了"; endTitle.className='defeat-text'; finalScoreEl.style.display='none'; restartBtn.innerText="重启文明"; updateEndStats(); clearInterval(peaceIntervalId); }
 
-    // === 新增：触发世界广播 ===
     function showWorldBroadcast(text) {
         broadcastBanner.innerText = text;
         broadcastBanner.classList.remove('active');
-        void broadcastBanner.offsetWidth; // 触发重绘，重启动画
+        void broadcastBanner.offsetWidth; 
         broadcastBanner.classList.add('active');
-        // 5秒后自动隐藏（虽然动画会自动淡出，但移除class更保险）
         setTimeout(() => {
             if (broadcastBanner.innerText === text) {
                 broadcastBanner.classList.remove('active');
@@ -737,10 +740,9 @@ document.addEventListener('DOMContentLoaded', () => {
     function checkBroadcast(currentCount) {
         if (broadcastMilestones.includes(currentCount) && !visitedMilestones.has(currentCount)) {
             visitedMilestones.add(currentCount);
-            // 随机选取一句
             const quote = getRandomQuote();
             showWorldBroadcast(`${quote}`);
-            playSound('alliance'); // 使用结盟音效作为提示音，或者你可以添加专门的广播音效
+            playSound('alliance');
         }
     }
 
@@ -897,19 +899,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const stickRight = document.getElementById('stick-right');
     const signalBtn = document.getElementById('mobile-signal-btn');
     let rightStickFireTimer = null;
-    function isTouchDevice() { return (('ontouchstart' in window) || (navigator.maxTouchPoints > 0)); }
-    if (isTouchDevice()) { mobileControls.style.display = 'block'; }
+    
+    // === 关键：更智能的触摸设备检测 ===
+    // 只有当真正发生触摸事件时，才显示移动端控制器
+    // 这样可以防止触摸屏笔记本电脑误显示虚拟摇杆
+    function showMobileControls() {
+        if (mobileControls.style.display !== 'block') {
+            mobileControls.style.display = 'block';
+        }
+    }
+    
+    // 监听第一次触摸事件来决定是否显示控制器
+    window.addEventListener('touchstart', function onFirstTouch() {
+        showMobileControls();
+        window.removeEventListener('touchstart', onFirstTouch);
+    }, { passive: false });
+
     function handleJoystick(touch, stickEl, callback) { const rect = stickEl.getBoundingClientRect(); const centerX = rect.left + rect.width / 2; const centerY = rect.top + rect.height / 2; const maxDist = rect.width / 2; let dx = touch.clientX - centerX; let dy = touch.clientY - centerY; const dist = Math.hypot(dx, dy); const knob = stickEl.querySelector('.joystick-knob'); const limitDist = Math.min(dist, maxDist); const angle = Math.atan2(dy, dx); const kx = Math.cos(angle) * limitDist; const ky = Math.sin(angle) * limitDist; knob.style.transform = `translate(${kx}px, ${ky}px)`; callback(kx / maxDist, ky / maxDist, limitDist / maxDist, angle); }
     function resetJoystick(stickEl) { const knob = stickEl.querySelector('.joystick-knob'); knob.style.transform = `translate(0px, 0px)`; }
+    
     stickLeft.addEventListener('touchstart', e => { if(isPaused) return; handleMove(e); });
     stickLeft.addEventListener('touchmove', e => { if(isPaused) return; e.preventDefault(); handleMove(e); });
     stickLeft.addEventListener('touchend', () => { resetJoystick(stickLeft); keys.w = false; keys.s = false; keys.a = false; keys.d = false; });
     function handleMove(e) { const touch = e.targetTouches[0]; handleJoystick(touch, stickLeft, (x, y, strength) => { if (strength > 0.2) { keys.w = y < -0.3; keys.s = y > 0.3; keys.a = x < -0.3; keys.d = x > 0.3; } else { keys.w = false; keys.s = false; keys.a = false; keys.d = false; } if (onTitleScreen) goToNextPage(); }); }
+    
     stickRight.addEventListener('touchstart', e => { if(isPaused) return; handleAim(e); });
     stickRight.addEventListener('touchmove', e => { if(isPaused) return; e.preventDefault(); handleAim(e); });
     stickRight.addEventListener('touchend', () => { resetJoystick(stickRight); if(rightStickFireTimer) { clearInterval(rightStickFireTimer); rightStickFireTimer = null; } });
     function handleAim(e) { const touch = e.targetTouches[0]; handleJoystick(touch, stickRight, (x, y, strength, angle) => { const centerOffsetX = Math.cos(angle) * 200; const centerOffsetY = Math.sin(angle) * 200; mouse.x = (canvas.width / 2) + centerOffsetX; mouse.y = (canvas.height / 2) + centerOffsetY; if (strength > 0.9) { if (!rightStickFireTimer) { tryMobileShoot(); rightStickFireTimer = setInterval(tryMobileShoot, 300); } } else { if (rightStickFireTimer) { clearInterval(rightStickFireTimer); rightStickFireTimer = null; } } }); }
+    
     function tryMobileShoot() { if(isPaused) return; const event = new MouseEvent('mousedown', { 'view': window, 'bubbles': true, 'cancelable': true, 'button': 2 }); window.dispatchEvent(event); }
+    
     signalBtn.addEventListener('touchstart', (e) => { if(isPaused) return; e.preventDefault(); isSignalDown = true; signalBtn.style.background = "rgba(0, 230, 118, 0.6)"; signalBtn.style.color = "#fff"; if (onTitleScreen) goToNextPage(); });
     signalBtn.addEventListener('touchend', (e) => { e.preventDefault(); isSignalDown = false; signalBtn.style.background = "rgba(0, 230, 118, 0.2)"; signalBtn.style.color = "#00e676"; });
 });
