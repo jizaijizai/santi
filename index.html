@@ -1,11 +1,13 @@
-<!-- 原作者B站 书与世Suis UID:13686871 -->
-<!-- 二创鸡仔 -->
+<!-- 原作者B站 书与世Suis UID:13686871 提供了最原始的电脑端游玩模式代码 -->
+<!-- 二创 鸡仔 
+在原有基础上增加手机电脑双端游玩模式，上帝模式里的血条控制，设置及设置内所有内容，支持局域网联机，完善了新手教程 其他请访问https://jizaijizai.github.io    -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>猜疑链：黑暗森林</title>
+    <title>猜疑链：黑暗森林 (P2P联机修正版)</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
             --color-primary: #00e676;
@@ -32,11 +34,6 @@
         
         canvas { display: block; }
 
-        ::-webkit-scrollbar { width: 6px; }
-        ::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.3); border-radius: 3px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.5); }
-
         /* === 修复核心：横屏强制提示 === */
         #landscape-lock {
             display: none;
@@ -48,14 +45,25 @@
         #landscape-lock svg { width: 64px; height: 64px; margin-bottom: 20px; fill: #fff; animation: rotate-phone 2s infinite; }
         @keyframes rotate-phone { 0%, 10% { transform: rotate(0deg); } 40%, 60% { transform: rotate(-90deg); } 90%, 100% { transform: rotate(0deg); } }
         
-        /* 修复说明：
-           将 max-width 这里的阈值从 1024px 修改为 900px。
-           大部分手机浏览器的“电脑模式”视口宽度为 980px。
-           修改后：980px (电脑模式) > 900px，因此不会命中此规则，不会显示锁定层。
-        */
         @media screen and (orientation: portrait) and (max-width: 900px) {
             #landscape-lock { display: flex; }
         }
+
+        /* 独立出来的设置按钮，层级最高，不随UI层隐藏 */
+        #settings-btn {
+            position: fixed; /* 使用 fixed 确保位置固定 */
+            top: max(15px, env(safe-area-inset-top)); 
+            right: max(15px, env(safe-area-inset-right));
+            width: 44px; height: 44px;
+            background: rgba(0,0,0,0.5);
+            border: 2px solid #fff; border-radius: 50%;
+            color: #fff; font-size: 22px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer; pointer-events: auto; 
+            z-index: 2000; /* 确保在所有图层之上 */
+            transition: all 0.3s;
+        }
+        #settings-btn:hover { background: #fff; color: #000; transform: rotate(90deg); }
 
         #ui-layer {
             position: absolute; top: 0; left: 0;
@@ -70,18 +78,6 @@
             padding-top: max(10px, env(safe-area-inset-top));
             pointer-events: none;
         }
-
-        #settings-btn {
-            position: absolute; top: max(15px, env(safe-area-inset-top)); right: max(15px, env(safe-area-inset-right));
-            width: 44px; height: 44px;
-            background: rgba(0,0,0,0.5);
-            border: 2px solid #fff; border-radius: 50%;
-            color: #fff; font-size: 22px;
-            display: flex; align-items: center; justify-content: center;
-            cursor: pointer; pointer-events: auto; z-index: 80;
-            transition: all 0.3s;
-        }
-        #settings-btn:hover { background: #fff; color: #000; transform: rotate(90deg); }
 
         #peace-timer {
             position: absolute; top: 15%; left: 50%; transform: translate(-50%, -50%);
@@ -104,12 +100,12 @@
         }
         .instruction-complete { color: var(--color-primary) !important; border-color: var(--color-primary) !important; transform: scale(1.05); }
 
+        .fire-allowed-anim { animation: fireAllowedPop 2s forwards; }
         @keyframes fireAllowedPop {
             0% { transform: translate(-50%, -50%) scale(1); opacity: 1; color: var(--color-danger); border-color: var(--color-danger); text-shadow: none; }
             70% { transform: translate(-50%, -50%) scale(1); opacity: 1; color: var(--color-danger); }
             100% { transform: translate(-50%, -50%) scale(1); opacity: 0; color: var(--color-danger); }
         }
-        .fire-allowed-anim { animation: fireAllowedPop 2s forwards; }
 
         #enemy-status-bar {
             display: flex; gap: 4px; background: rgba(0, 0, 0, 0.4);
@@ -130,6 +126,12 @@
             position: absolute; top: max(15px, env(safe-area-inset-top)); left: max(15px, env(safe-area-inset-left));
             font-size: clamp(14px, 3.5vw, 20px); font-weight: bold; color: #e0e0e0; text-shadow: 2px 2px 0px #000;
         }
+        
+        #online-status {
+            font-size: 0.8em; color: #888; display: block; margin-top: 4px;
+        }
+        .online-active { color: #00e676 !important; }
+        .online-role { font-size: 0.8em; margin-left: 5px; border: 1px solid #555; padding: 0 4px; border-radius: 4px; }
 
         .status-panel {
             position: fixed; top: max(60px, calc(env(safe-area-inset-top) + 40px)); left: max(15px, env(safe-area-inset-left));
@@ -154,22 +156,13 @@
         @keyframes pulse-text { 0% { opacity: 0.6; } 50% { opacity: 1; } 100% { opacity: 0.6; } }
 
         #game-broadcast {
-            position: absolute;
-            top: 15%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 90%;
-            text-align: center;
-            font-size: clamp(18px, 5vw, 32px);
-            font-weight: bold;
-            color: #fff;
+            position: absolute; top: 15%; left: 50%; transform: translate(-50%, -50%);
+            width: 90%; text-align: center;
+            font-size: clamp(18px, 5vw, 32px); font-weight: bold; color: #fff;
             text-shadow: 0 0 10px rgba(255, 255, 255, 0.8), 0 0 20px rgba(0, 230, 118, 0.4);
-            pointer-events: none;
-            opacity: 0;
-            z-index: 80;
+            pointer-events: none; opacity: 0; z-index: 80;
             transition: opacity 0.5s ease-in-out;
-            font-family: "SimSun", "Songti SC", serif;
-            letter-spacing: 2px;
+            font-family: "SimSun", "Songti SC", serif; letter-spacing: 2px;
         }
         #game-broadcast.active { opacity: 1; animation: broadcast-pulse 4s forwards; }
         @keyframes broadcast-pulse {
@@ -197,7 +190,7 @@
             padding-bottom: max(20px, env(safe-area-inset-bottom));
             box-sizing: border-box;
         }
-        #pause-menu { background: rgba(0,0,0,0.85); backdrop-filter: blur(5px); z-index: 90; display: none; justify-content: center; }
+        #pause-menu { background: rgba(0,0,0,0.9); backdrop-filter: blur(8px); z-index: 2100; display: none; justify-content: center; } /* 提高z-index盖过所有 */
         
         .page-container {
             margin: auto; width: 100%;
@@ -265,6 +258,15 @@
         #tutorial-btn:hover, #tutorial-btn:active { border-color:var(--color-primary); background:var(--color-primary); color:#000; }
         #skip-tutorial-btn:hover, #skip-tutorial-btn:active { border-color:#aaa; background:#aaa; color:#000; box-shadow:0 0 15px rgba(255,255,255,.3); }
         
+        .p2p-panel {
+            background: rgba(0,0,0,0.3); border: 1px solid #00e676; padding: 15px; border-radius: 10px;
+            margin-bottom: 20px; display: flex; flex-direction: column; gap: 10px; width: 90%; max-width: 450px;
+        }
+        .p2p-title { color: #00e676; font-size: 18px; margin-bottom: 5px; font-weight: bold; border-bottom: 1px solid #333; padding-bottom: 5px;}
+        .p2p-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+        #my-room-code-display { font-family: 'Courier New', monospace; color: #fff; font-size: 24px; font-weight: bold; letter-spacing: 2px; color: #00e676; user-select: all; cursor: pointer; text-align: center; margin: 5px 0;}
+        .copy-hint { font-size: 10px; color: #aaa; text-align: center;}
+
         .btn-group { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px; width: 100%; margin-bottom: 20px; }
         .start-prompt { font-size: clamp(18px, 4vw, 24px); color:#b0bec5; letter-spacing:3px; text-transform:uppercase; margin-top: 20px; text-align:center; animation:pulse 2s infinite; cursor:pointer; z-index:20; }
         .hidden { display:none!important; }
@@ -308,17 +310,17 @@
         <h2>为了最佳体验<br>请将手机旋转至横屏</h2>
     </div>
 
+    <button id="settings-btn">⚙️</button>
+
     <div id="ui-layer" class="hidden">
-        <button id="settings-btn">⚙️</button>
         <div id="top-hud">
             <div id="peace-timer">和平时间: 10s</div>
-            <!-- 新增广播显示区域 -->
             <div id="game-broadcast"></div>
             <div id="tutorial-instruction"></div>
             <div id="enemy-status-bar"></div>
         </div>
         <div id="cosmic-echo-banner">宇宙回声<br><span style="font-size:0.5em; letter-spacing:2px;">坐标已暴露！</span></div>
-        <div class="score-board">幸存者: <span id="survivor-count">21</span></div>
+        <div class="score-board">幸存者: <span id="survivor-count">21</span><br><span id="online-status">离线模式</span></div>
         <div class="status-panel">
             <div class="ammo-display">
                 <div style="min-width: 100px;"><div>子弹: <span id="ammo-count">3</span> <span id="reload-hint" class="reload-text">装填中...</span></div><div class="ammo-regen-bar" id="ammo-regen-bar"></div></div>
@@ -341,14 +343,38 @@
 
     <div id="pause-menu">
         <div class="page-container">
-            <h2 style="color: #fff; font-size: clamp(24px, 6vw, 40px); margin-bottom: 20px;">游戏暂停</h2>
+            <h2 style="color: #fff; font-size: clamp(24px, 6vw, 40px); margin-bottom: 20px;">系统设置</h2>
+            
+            <div class="p2p-panel">
+                <div class="p2p-title">多人联机 (局域网)</div>
+                <div id="p2p-setup-area">
+                    <div style="margin-bottom: 5px; color: #eee; font-size: 14px;">我是房主：</div>
+                    <button id="host-game-btn" style="width: 100%; border-color: #00e676; color: #00e676; font-size: 14px;">生成6位房间号</button>
+                    
+                    <div id="host-info-area" class="hidden" style="margin-top: 10px;">
+                        <div class="copy-hint">将房间号告诉朋友:</div>
+                        <div id="my-room-code-display">---</div>
+                        <div style="font-size: 12px; color: #888; margin-top: 4px;">等待加入... (<span id="connected-count">0</span>人)</div>
+                    </div>
+
+                    <div style="margin: 15px 0 10px 0; border-top: 1px solid #444;"></div>
+                    
+                    <div style="margin-bottom: 5px; color: #eee; font-size: 14px;">我是加入者：</div>
+                    <div class="p2p-row">
+                        <input type="number" id="host-id-input" class="gm-input" style="width: 120px; text-align: center; letter-spacing: 2px;" placeholder="6位号码" maxlength="6">
+                        <button id="join-game-btn" style="border-color: #29b6f6; color: #29b6f6; font-size: 14px; padding: 8px 15px;">加入</button>
+                    </div>
+                    <div id="join-status-msg" style="font-size: 12px; color: #aaa; margin-top: 5px;">当前未连接</div>
+                </div>
+            </div>
+
             <div class="settings-controls">
                 <div class="gm-row"><span class="gm-label">输入密语 (彩蛋)</span><input type="text" id="setting-secret" class="gm-input" style="width: 120px; text-transform: lowercase;" placeholder="____"></div>
                 <div class="gm-row"><span class="gm-label">声音效果</span><input type="checkbox" id="setting-sound" class="settings-checkbox" checked></div>
                 <div class="gm-row"><span class="gm-label">开启小地图</span><input type="checkbox" id="setting-minimap-toggle" class="settings-checkbox" checked></div>
                 <div class="gm-row"><span class="gm-label">小地图尺寸</span><input type="range" id="setting-minimap-size" class="settings-slider" min="0.5" max="1.5" step="0.1" value="1.0"></div>
             </div>
-            <div class="btn-group"><button id="resume-btn" style="border-color: #00e676; color: #00e676;">继续游戏</button><button id="quit-btn" style="border-color: #ff5252; color: #ff5252;">退出游戏</button></div>
+            <div class="btn-group"><button id="resume-btn" style="border-color: #00e676; color: #00e676;">返回/开始</button><button id="quit-btn" style="border-color: #ff5252; color: #ff5252;">退出游戏</button></div>
         </div>
     </div>
 
@@ -418,8 +444,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('touchmove', function(e) { if (!e.target.closest('#menu-overlay') && !e.target.closest('#pause-menu')) { e.preventDefault(); } }, { passive: false });
     document.addEventListener('dblclick', function(event) { event.preventDefault(); }, { passive: false });
 
-    // === 核心逻辑修复：主动检测桌面环境并移除遮罩 ===
-    // 如果浏览器UA包含Windows/Mac/Linux且没有Mobile字样，或者屏幕宽度大于900，强制隐藏锁定层
     function checkDesktopEnv() {
         const isDesktop = !/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         const isLargeScreen = window.innerWidth > 900;
@@ -428,7 +452,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (lock) lock.style.display = 'none';
         }
     }
-    // 初始化和调整窗口时都运行一次
     checkDesktopEnv();
     window.addEventListener('resize', checkDesktopEnv);
 
@@ -487,6 +510,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const peaceTimerEl = document.getElementById('peace-timer');
     const enemyStatusBar = document.getElementById('enemy-status-bar');
     const tutorialInstructionEl = document.getElementById('tutorial-instruction');
+    const onlineStatusEl = document.getElementById('online-status');
+    const hostGameBtn = document.getElementById('host-game-btn');
+    const joinGameBtn = document.getElementById('join-game-btn');
+    const hostInfoArea = document.getElementById('host-info-area');
+    const myRoomCodeDisplay = document.getElementById('my-room-code-display');
+    const hostIdInput = document.getElementById('host-id-input');
+    const joinStatusMsg = document.getElementById('join-status-msg');
+    const connectedCountEl = document.getElementById('connected-count');
 
     let worldWidth, worldHeight;
     const camera = { x: 0, y: 0 };
@@ -513,10 +544,282 @@ document.addEventListener('DOMContentLoaded', () => {
     let tutorialState = { step: 0, movedDist: 0, targetsHit: 0, targetsNeeded: 3, startPos: null };
     let tutorialTargets = [];
 
-    // === 广播系统相关变量 ===
+    // === P2P Network (PeerJS) ===
+    const ROOM_PREFIX = "df_game_v1_"; // 为了区分，加个前缀
+
+    // 免费公共 STUN 服务器，提高连接成功率
+    const peerConfig = {
+        debug: 1,
+        config: {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:global.stun.twilio.com:3478' }
+            ]
+        }
+    };
+
+    const Network = {
+        peer: null,
+        conn: null, // Client connection to host
+        connections: [], // Host connections to clients
+        mode: 'OFFLINE', // 'HOST', 'CLIENT', 'OFFLINE'
+        remotePlayers: {}, // { id: {x,y,angle,isSignaling,hp, lastUpdate} }
+        roomCode: null,
+        
+        initHost: function() {
+            if (this.peer) return;
+            
+            // 自动重试机制：防止生成的随机 ID 冲突
+            const tryCreate = () => {
+                this.roomCode = Math.floor(100000 + Math.random() * 900000).toString();
+                const fullId = ROOM_PREFIX + this.roomCode;
+                
+                // 创建 Peer 对象
+                this.peer = new Peer(fullId, peerConfig); 
+                
+                this.peer.on('open', (id) => {
+                    this.mode = 'HOST';
+                    myRoomCodeDisplay.innerText = this.roomCode;
+                    hostInfoArea.classList.remove('hidden');
+                    hostGameBtn.disabled = true;
+                    joinGameBtn.disabled = true;
+                    hostIdInput.disabled = true;
+                    onlineStatusEl.innerHTML = `P2P在线 <span class='online-role'>房主</span>`;
+                    onlineStatusEl.classList.add('online-active');
+                    joinStatusMsg.innerText = "房间创建成功，等待加入...";
+                    joinStatusMsg.style.color = "#00e676";
+                });
+
+                this.peer.on('connection', (conn) => {
+                    this.connections.push(conn);
+                    connectedCountEl.innerText = this.connections.length;
+                    
+                    conn.on('open', () => {
+                        conn.send({ type: 'init', selfId: conn.peer });
+                    });
+                    
+                    conn.on('data', (data) => {
+                        this.handleData(data, conn.peer);
+                    });
+                    
+                    conn.on('close', () => {
+                       this.connections = this.connections.filter(c => c !== conn);
+                       delete this.remotePlayers[conn.peer];
+                       connectedCountEl.innerText = this.connections.length;
+                    });
+                });
+
+                this.peer.on('error', (err) => {
+                    if (err.type === 'unavailable-id') {
+                        // 如果 ID 被占用，销毁旧对象并重试
+                        console.log("ID冲突，重试中...");
+                        this.peer.destroy();
+                        this.peer = null;
+                        setTimeout(tryCreate, 200); // 稍微延迟后重试
+                    } else {
+                        joinStatusMsg.innerText = "创建失败: " + err.type;
+                        alert("创建房间失败，网络可能受限: " + err);
+                        this.peer = null;
+                    }
+                });
+            };
+
+            tryCreate();
+        },
+        
+        initClient: function(shortCode) {
+            if (this.peer) return;
+            
+            this.peer = new Peer(null, peerConfig); // 客户端使用自动 ID
+            
+            this.peer.on('open', (id) => {
+                this.mode = 'CLIENT';
+                const hostFullId = ROOM_PREFIX + shortCode;
+                this.conn = this.peer.connect(hostFullId);
+                
+                joinStatusMsg.innerText = "正在连接...";
+                joinStatusMsg.style.color = "#ccc";
+                
+                this.conn.on('open', () => {
+                    joinStatusMsg.innerText = "已连接到房主!";
+                    joinStatusMsg.style.color = "#00e676";
+                    hostGameBtn.disabled = true;
+                    joinGameBtn.disabled = true;
+                    hostIdInput.disabled = true;
+                    onlineStatusEl.innerHTML = `P2P在线 <span class='online-role'>加入者</span>`;
+                    onlineStatusEl.classList.add('online-active');
+                });
+                
+                this.conn.on('data', (data) => {
+                    this.handleData(data);
+                });
+                
+                this.conn.on('error', (err) => {
+                    joinStatusMsg.innerText = "连接中断";
+                });
+                
+                this.conn.on('close', () => {
+                    alert("与房主断开连接");
+                    location.reload();
+                });
+            });
+
+            this.peer.on('error', (err) => {
+                joinStatusMsg.innerText = "连接失败: 房间可能不存在";
+                joinStatusMsg.style.color = "#ff5252";
+                this.peer = null;
+            });
+        },
+
+        handleData: function(data, senderId) {
+            if (this.mode === 'HOST') {
+                // Host logic: Receive updates from clients
+                if (data.type === 'clientUpdate') {
+                    this.remotePlayers[senderId] = data.player;
+                    this.remotePlayers[senderId].lastUpdate = Date.now();
+                } else if (data.type === 'shoot') {
+                    // Broadcast shoot to others
+                    const vel = {x: Math.cos(data.angle)*12, y: Math.sin(data.angle)*12};
+                    projectiles.push(new Projectile(data.x, data.y, 4, '#03a9f4', vel, null)); 
+                    flashes.push(new MuzzleFlash(data.x, data.y));
+                    playSound('shoot');
+                    this.broadcast({ type: 'remoteShoot', id: senderId, x: data.x, y: data.y, angle: data.angle }, senderId);
+                }
+            } else if (this.mode === 'CLIENT') {
+                // Client logic: Receive world state from host
+                if (data.type === 'worldUpdate') {
+                    // Update remote players
+                    const players = data.players;
+                    for (let id in players) {
+                        if (id !== this.peer.id) {
+                            this.remotePlayers[id] = players[id];
+                        }
+                    }
+                    // Update enemies (Force sync from host)
+                    if (data.enemies) {
+                        this.syncEnemies(data.enemies);
+                    }
+                } else if (data.type === 'remoteShoot') {
+                    const vel = {x: Math.cos(data.angle)*12, y: Math.sin(data.angle)*12};
+                    projectiles.push(new Projectile(data.x, data.y, 4, '#03a9f4', vel, null)); 
+                    flashes.push(new MuzzleFlash(data.x, data.y));
+                    playSound('shoot');
+                } else if (data.type === 'gameStart') {
+                    // Host started game
+                    menuOverlay.classList.add('hidden'); 
+                    // Close settings if open
+                    if (isPaused) togglePause(); 
+                    
+                    gameRunning = true; 
+                    init('survival'); // Re-init but keep P2P
+                    animate();
+                }
+            }
+        },
+
+        syncEnemies: function(hostEnemies) {
+            const validIds = new Set();
+            hostEnemies.forEach(he => {
+                validIds.add(he.uid);
+                let local = enemies.find(e => e.uid === he.uid);
+                if (!local) {
+                    local = new Enemy(he.x, he.y, he.aiType);
+                    local.uid = he.uid;
+                    local.baseColor = he.baseColor;
+                    enemies.push(local);
+                    if(!document.getElementById('status-'+he.uid)){
+                         const icon=document.createElement('div'); icon.className='status-icon'; icon.style.backgroundColor=he.baseColor; icon.id='status-'+he.uid; enemyStatusBar.appendChild(icon);
+                    }
+                }
+                local.x = he.x;
+                local.y = he.y;
+                local.angle = he.angle;
+                local.health = he.hp;
+                local.isSignaling = he.isSig;
+                local.squad.color = he.sqColor; 
+                if(local.health <= 0) {
+                     const icon=document.getElementById('status-'+local.uid);
+                     if(icon) icon.classList.add('dead');
+                }
+            });
+            
+            for(let i = enemies.length - 1; i >= 0; i--) {
+                if(!validIds.has(enemies[i].uid)) {
+                    const icon=document.getElementById('status-'+enemies[i].uid);
+                    if(icon) icon.classList.add('dead'); 
+                    enemies.splice(i, 1);
+                }
+            }
+        },
+
+        broadcast: function(data, excludeId) {
+            this.connections.forEach(conn => {
+                if (conn.peer !== excludeId && conn.open) {
+                    conn.send(data);
+                }
+            });
+        },
+
+        sendUpdate: function(player) {
+            if (this.mode === 'CLIENT' && this.conn && this.conn.open) {
+                this.conn.send({
+                    type: 'clientUpdate',
+                    player: {
+                        x: Math.round(player.x),
+                        y: Math.round(player.y),
+                        angle: player.angle,
+                        isSignaling: player.isSignaling,
+                        hp: player.health
+                    }
+                });
+            } else if (this.mode === 'HOST') {
+                const allPlayers = { ...this.remotePlayers };
+                allPlayers[this.peer.id] = {
+                    x: Math.round(player.x), y: Math.round(player.y), angle: player.angle, isSignaling: player.isSignaling, hp: player.health
+                };
+                const enemyData = enemies.map(e => ({
+                    uid: e.uid, x: Math.round(e.x), y: Math.round(e.y), angle: e.angle, hp: e.health, 
+                    isSig: e.isSignaling, aiType: e.aiType, baseColor: e.baseColor, sqColor: e.squad.color
+                }));
+
+                this.broadcast({
+                    type: 'worldUpdate',
+                    players: allPlayers,
+                    enemies: enemyData
+                });
+            }
+        },
+        
+        sendShoot: function(player, angle) {
+            if (this.mode === 'CLIENT' && this.conn && this.conn.open) {
+                this.conn.send({ type: 'shoot', x: player.x, y: player.y, angle: angle });
+            } else if (this.mode === 'HOST') {
+                this.broadcast({ type: 'remoteShoot', id: this.peer.id, x: player.x, y: player.y, angle: angle });
+            }
+        },
+        
+        notifyGameStart: function() {
+            if(this.mode === 'HOST') {
+                this.broadcast({ type: 'gameStart' });
+            }
+        }
+    };
+
+    hostGameBtn.addEventListener('click', () => Network.initHost());
+    joinGameBtn.addEventListener('click', () => {
+        const id = hostIdInput.value.trim();
+        if(id.length === 6) Network.initClient(id);
+        else alert("请输入6位房间号");
+    });
+    myRoomCodeDisplay.addEventListener('click', () => {
+        if(Network.mode === 'HOST') {
+            navigator.clipboard.writeText(myRoomCodeDisplay.innerText);
+            alert("房间号已复制");
+        }
+    });
+
     const broadcastMilestones = [23, 13, 8, 3];
     let visitedMilestones = new Set();
-    // 经典语录库
     const quotes = [
         "宇宙就是一座黑暗森林，每个文明都是带枪的猎人。",
         "在猜疑链中，善意是最奢侈的赌注。",
@@ -571,14 +874,37 @@ document.addEventListener('DOMContentLoaded', () => {
     settingSecretInput.addEventListener('input', (e) => { if (checkSecretCode(e.target.value)) { e.target.value = ""; alert("上帝模式已激活！请退出当前游戏并在主菜单配置。"); gameRunning = false; togglePause(); softResetToMenu(); triggerGodMode(); } });
 
     function togglePause() {
-        if (!gameRunning) return;
         isPaused = !isPaused;
-        if (isPaused) { pauseMenu.style.display = 'flex'; settingsBtn.style.display = 'none'; } 
-        else { pauseMenu.style.display = 'none'; settingsBtn.style.display = 'flex'; lastFrameTime = performance.now(); animate(); }
+        if (isPaused) { 
+            pauseMenu.style.display = 'flex'; 
+            settingsBtn.style.display = 'none';
+        } else { 
+            pauseMenu.style.display = 'none'; 
+            settingsBtn.style.display = 'flex'; 
+            if(gameRunning) {
+                lastFrameTime = performance.now(); 
+                animate();
+            }
+        }
     }
 
     settingsBtn.addEventListener('click', togglePause);
-    resumeBtn.addEventListener('click', togglePause);
+    resumeBtn.addEventListener('click', () => {
+        if (Network.mode === 'CLIENT' && !gameRunning) {
+            alert("请等待房主开始游戏");
+            return;
+        }
+        if (Network.mode === 'HOST' && !gameRunning) {
+            Network.notifyGameStart();
+            init('survival');
+            menuOverlay.classList.add('hidden');
+            gameRunning = true;
+            togglePause(); 
+            animate();
+            return;
+        }
+        togglePause();
+    });
     quitBtn.addEventListener('click', () => { togglePause(); gameRunning = false; softResetToMenu(); });
     settingSound.addEventListener('change', (e) => { soundEnabled = e.target.checked; });
     settingMinimapToggle.addEventListener('change', (e) => { minimapWrap.style.display = e.target.checked ? 'block' : 'none'; });
@@ -588,10 +914,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let onTitleScreen = true;
 
     window.addEventListener('keydown', (e) => {
-        if (onTitleScreen && !pageTitle.classList.contains('hidden')) { goToNextPage(); return; }
-        if (document.activeElement === secretInput || document.activeElement === settingSecretInput) return;
+        if (onTitleScreen && !pageTitle.classList.contains('hidden')) { 
+            if(document.activeElement === hostIdInput) return; 
+            if(isPaused) return; 
+            goToNextPage(); return; 
+        }
+        if (document.activeElement === secretInput || document.activeElement === settingSecretInput || document.activeElement === hostIdInput) return;
         if (e.key === 'Escape') { togglePause(); return; }
-        if (!isPaused) {
+        if (!isPaused && gameRunning) {
             if (e.key.length === 1) {
                 inputSequence += e.key.toLowerCase();
                 if (inputSequence.length > 20) inputSequence = inputSequence.slice(-20);
@@ -605,6 +935,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); if (keys.hasOwnProperty(k)) keys[k] = false; });
     window.onmousedown = (e) => {
         if (e.target === settingsBtn || isPaused) return;
+        if (e.target === hostIdInput) return; 
         if (onTitleScreen && !pageTitle.classList.contains('hidden')) { goToNextPage(); } 
         else if (e.button === 2) {
             if (!gameRunning || isPaused) return;
@@ -617,8 +948,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 projectiles.push(new Projectile(player.x, player.y, 4, '#ffd54f', vel, player.squad));
                 flashes.push(new MuzzleFlash(player.x, player.y));
                 playSound('shoot');
+                Network.sendShoot(player, angle);
             }
         } else if (e.button === 0) {
+            if (e.target.closest('.p2p-panel')) return;
             if (!gameRunning || isPaused) return;
             isSignalDown = true;
         }
@@ -627,7 +960,19 @@ document.addEventListener('DOMContentLoaded', () => {
     window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
 
     nextBtn2.addEventListener('click', () => { pageRules.classList.add('hidden'); pageControls.classList.remove('hidden'); updateControlsPage(); });
-    startGameBtn.addEventListener('click', () => { init('survival'); menuOverlay.classList.add('hidden'); gameRunning = true; animate(); });
+    startGameBtn.addEventListener('click', () => { 
+        if(Network.mode === 'CLIENT') {
+            alert("等待房主开始游戏...");
+            return;
+        }
+        if(Network.mode === 'HOST') {
+             Network.notifyGameStart();
+        }
+        init('survival'); 
+        menuOverlay.classList.add('hidden'); 
+        gameRunning = true; 
+        animate(); 
+    });
     tutorialBtn.addEventListener('click', () => { init('tutorial'); menuOverlay.classList.add('hidden'); gameRunning = true; animate(); });
     skipTutorialBtn.addEventListener('click', () => { isTutorialCompleted = true; updateControlsPage(); });
     restartBtn.addEventListener('click', () => { menuOverlay.classList.remove('hidden'); pageGameOver.classList.add('hidden'); pageTitle.classList.add('hidden'); pageRules.classList.add('hidden'); pageGodMode.classList.add('hidden'); pageControls.classList.remove('hidden'); updateControlsPage(); });
@@ -637,6 +982,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gameConfig.aiCounts.PACIFIST = parseInt(gmPacifist.value) || 0;
         gameConfig.initialAmmo = parseInt(gmAmmo.value) || 3;
         gameConfig.initialHp = parseInt(gmPlayerHp.value) || 4;
+        Network.notifyGameStart();
         init('survival'); menuOverlay.classList.add('hidden'); gameRunning = true; animate();
     });
 
@@ -670,10 +1016,10 @@ document.addEventListener('DOMContentLoaded', () => {
         drawHealth(ctx2){ const max=this.maxHealth, current=this.health; if (max > 20) { const barWidth=40, barHeight=6; const pct = current / max; ctx2.fillStyle = '#333'; ctx2.fillRect(-barWidth/2, -this.radius-15, barWidth, barHeight); ctx2.fillStyle = (this.squad===player.squad?'#2e7d32':'#d32f2f'); ctx2.fillRect(-barWidth/2, -this.radius-15, barWidth * pct, barHeight); return; } const barWidth=40, barHeight=6, gap=2, segmentWidth=barWidth/4; const totalWidth=(segmentWidth*max)+(gap*(max-1)); const startX=-totalWidth/2; for(let i=0;i<max;i++){ ctx2.fillStyle=(i<current)?(this.squad===player.squad?'#2e7d32':'#d32f2f'):'#333'; ctx2.fillRect(startX+i*(segmentWidth+gap), -this.radius-15, segmentWidth, barHeight); } }
         checkAlliance(others){ if(this.squad.members.length>=5) return; let partner=null, minDist=250; for(let other of others){ if(other===this || other.squad===this.squad) continue; if(this.squad.members.length+other.squad.members.length>5) continue; if(other.allianceTarget && other.allianceTarget!==this) continue; const dist=Math.hypot(this.x-other.x, this.y-other.y); if(dist<minDist && this.isSignaling && other.isSignaling){ partner=other; minDist=dist; } } if(partner){ this.allianceTarget=partner; this.allianceProgress+=16; if(this.allianceProgress>3000){ const ok=this.squad.addMember(partner); if(ok){ if(gameMode!=='tutorial') statAlliances++; if(this===player || partner===player || this.squad===player.squad || partner.squad===player.squad){ gainEnergyCapacityBonus(); } this.allianceProgress=0; this.allianceTarget=null; createExplosion(this.x,this.y,'#00e676',20); createExplosion(partner.x,partner.y,'#00e676',20); playSound('alliance'); if(gameMode==='tutorial' && tutorialState.step===2){ completeTutorial(); } } } }else{ this.allianceProgress=0; this.allianceTarget=null; } }
     }
-    class Player extends BaseUnit{ constructor(x,y){ super(x,y,12,'#81c784', gameConfig.initialHp); this.speed=4; } update(enemies){ this.updateAmmo(); this.isSignaling=isSignalDown; let moved=false; if(keys.w && this.y-this.radius>0){ this.y-=this.speed; moved=true; } if(keys.s && this.y+this.radius<worldHeight){ this.y+=this.speed; moved=true; } if(keys.a && this.x-this.radius>0){ this.x-=this.speed; moved=true; } if(keys.d && this.x+this.radius<worldWidth){ this.x+=this.speed; moved=true; } if(moved && gameMode==='tutorial' && tutorialState.step===0){ tutorialState.movedDist+=this.speed; if(tutorialState.movedDist>500){ tutorialState.step=1; updateTutorialUI(); spawnTutorialTargets(); } } const dx=(mouse.x+camera.x)-this.x, dy=(mouse.y+camera.y)-this.y; this.angle=Math.atan2(dy,dx); this.checkAlliance(enemies); this.draw(); } draw(){ ctx.save(); ctx.translate(this.x,this.y); this.drawSignal(); this.drawHealth(ctx); this.drawAllianceBar(ctx); ctx.rotate(this.angle); ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,300,-0.35,0.35); const gradient=ctx.createRadialGradient(0,0,0,0,0,300); gradient.addColorStop(0,'rgba(255,255,200,0.4)'); gradient.addColorStop(1,'rgba(255,255,200,0)'); ctx.fillStyle=gradient; ctx.fill(); ctx.beginPath(); ctx.arc(0,0,this.radius,0,Math.PI*2); ctx.fillStyle=(this.squad.members.length>1)?'#00e676':this.baseColor; ctx.fill(); ctx.strokeStyle='#1b5e20'; ctx.lineWidth=2; ctx.stroke(); ctx.fillStyle='#111'; ctx.fillRect(5,-3,15,6); ctx.restore(); } }
+    class Player extends BaseUnit{ constructor(x,y){ super(x,y,12,'#81c784', gameConfig.initialHp); this.speed=4; } update(enemies){ this.updateAmmo(); this.isSignaling=isSignalDown; let moved=false; if(keys.w && this.y-this.radius>0){ this.y-=this.speed; moved=true; } if(keys.s && this.y+this.radius<worldHeight){ this.y+=this.speed; moved=true; } if(keys.a && this.x-this.radius>0){ this.x-=this.speed; moved=true; } if(keys.d && this.x+this.radius<worldWidth){ this.x+=this.speed; moved=true; } if(moved && gameMode==='tutorial' && tutorialState.step===0){ tutorialState.movedDist+=this.speed; if(tutorialState.movedDist>500){ tutorialState.step=1; updateTutorialUI(); spawnTutorialTargets(); } } const dx=(mouse.x+camera.x)-this.x, dy=(mouse.y+camera.y)-this.y; this.angle=Math.atan2(dy,dx); this.checkAlliance(enemies); this.draw(); Network.sendUpdate(this); } draw(){ ctx.save(); ctx.translate(this.x,this.y); this.drawSignal(); this.drawHealth(ctx); this.drawAllianceBar(ctx); ctx.rotate(this.angle); ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,300,-0.35,0.35); const gradient=ctx.createRadialGradient(0,0,0,0,0,300); gradient.addColorStop(0,'rgba(255,255,200,0.4)'); gradient.addColorStop(1,'rgba(255,255,200,0)'); ctx.fillStyle=gradient; ctx.fill(); ctx.beginPath(); ctx.arc(0,0,this.radius,0,Math.PI*2); ctx.fillStyle=(this.squad.members.length>1)?'#00e676':this.baseColor; ctx.fill(); ctx.strokeStyle='#1b5e20'; ctx.lineWidth=2; ctx.stroke(); ctx.fillStyle='#111'; ctx.fillRect(5,-3,15,6); ctx.restore(); } }
     class Enemy extends BaseUnit{ constructor(x,y,aiType){ super(x,y,15,'#ef5350'); this.speed=Math.random()*1.5+2.5; this.lastShotTime=Date.now(); this.shootInterval=Math.random()*1500+500; this.aiType=aiType||'DECEIVER'; this.provoked=false; this.wanderDest=null; this.wanderTimer=0; this.attackDest=null; this.attackTimer=0; this.angryTimer=0; this.betrayalTimer=0; this.mode='EXPLORING'; this.isTutorialTarget=false; this.signalTimer=0; this.isDeceiverInAttack=false; this.attackPhaseTimer=0; } update(allUnits){ this.updateAmmo(); if(gameMode==='tutorial'){ if(this.isTutorialTarget){ this.draw(); return; } if(this.aiType==='PACIFIST'){ const dist=Math.hypot(player.x-this.x, player.y-this.y); if(dist>150){ const ang=Math.atan2(player.y-this.y, player.x-this.x); this.x+=Math.cos(ang)*3; this.y+=Math.sin(ang)*3; this.angle=ang; } this.isSignaling=true; this.checkAlliance(allUnits); this.draw(); return; } } let target=null, minDist=10000; for(let unit of allUnits){ if(unit===this || unit.squad===this.squad) continue; const d=Math.hypot(this.x-unit.x, this.y-unit.y); if(d<minDist){ minDist=d; target=unit; } } this.isSignaling = (this.aiType==='PACIFIST' && !this.provoked && this.squad.members.length===1); if(this.squad.members.length>1 && this.squad.members.includes(player)){ this.mode='FOLLOW_PLAYER'; } else if(this.mode==='EXPLORING'){ const aggroDist=isPeaceTime?150:600; if(target){ const isSignalingMe=target.isSignaling && minDist<600; const isTooClose=minDist<aggroDist; let shouldEngage=false; if(!isPeaceTime){ if(isTooClose || isSignalingMe || (this.provoked && minDist<800)) shouldEngage=true; } else{ if(this.aiType!=='AGGRESSOR'){ if(isTooClose || isSignalingMe){ if(target.allianceTarget && target.allianceTarget!==this){ this.mode='EXPLORING'; const angAway=Math.atan2(this.y-target.y, this.x-target.x); this.wanderDest={x:this.x+Math.cos(angAway)*1000, y:this.y+Math.sin(angAway)*1000}; this.wanderTimer=300; shouldEngage=false; }else{ shouldEngage=true; } } } } if(this.aiType==='PACIFIST' && (this.squad.members.length>1 || this.provoked)){ if(target.isSignaling){ shouldEngage=false; this.isSignaling=true; } else { shouldEngage=true; } } if(shouldEngage){ this.mode='ENGAGING'; this.attackTimer=0; } } } else if(this.mode==='ENGAGING'){ if(!target || minDist>1000){ this.mode='EXPLORING'; this.wanderDest=null; } } if(this.mode==='FOLLOW_PLAYER'){ this.behaviorFollow(target); } else if(this.mode==='EXPLORING'){ this.behaviorWander(); } else if(this.mode==='ENGAGING' && target){ if(this.aiType==='AGGRESSOR'){ this.behaviorAttack(target); } else if(this.aiType==='DECEIVER'){ const dist=Math.hypot(target.x-this.x, target.y-this.y); if(this.angryTimer>0){ this.angryTimer--; this.behaviorAttack(target); if(this.betrayalTimer>0){ this.betrayalTimer--; if(dist<300){ const a=Math.atan2(this.y-target.y, this.x-target.x); this.x+=Math.cos(a)*this.speed*0.5; this.y+=Math.sin(a)*this.speed*0.5; } } } else { this.behaviorSignal(target); this.checkAlliance(allUnits); if(this.allianceProgress>1500){ this.showEmoji("😂👉🤡",120); this.isSignaling=false; this.allianceProgress=0; this.allianceTarget=null; this.angryTimer=300; this.betrayalTimer=300; this.lastShotTime=0; if(isPeaceTime){ this.mode='EXPLORING'; const a=Math.atan2(this.y-target.y, this.x-target.x); this.wanderDest={x:this.x+Math.cos(a)*2000, y:this.y+Math.sin(a)*2000}; this.wanderTimer=1000; this.emojiTimer=0; } } } } else if(this.aiType==='PACIFIST'){ const hasAlly = this.squad.members.length>1; if(this.provoked || hasAlly){ if(target.isSignaling){ this.behaviorSignal(target); this.checkAlliance(allUnits); } else { this.behaviorAttack(target); } } else { this.behaviorSignal(target); this.checkAlliance(allUnits); } } } this.x=Math.max(20,Math.min(this.x,worldWidth-20)); this.y=Math.max(20,Math.min(this.y,worldHeight-20)); this.draw(); } behaviorWander(){ if(!this.wanderDest || this.wanderTimer<=0){ this.wanderDest={x:Math.random()*worldWidth, y:Math.random()*worldHeight}; this.wanderTimer=Math.random()*500+200; } this.wanderTimer--; const dx=this.wanderDest.x-this.x, dy=this.wanderDest.y-this.y; const dist=Math.hypot(dx,dy); if(dist>50){ this.angle=Math.atan2(dy,dx); this.x+=Math.cos(this.angle)*this.speed*0.8; this.y+=Math.sin(this.angle)*this.speed*0.8; } else { this.wanderDest=null; } } behaviorAttack(target){ this.angle=Math.atan2(target.y-this.y, target.x-this.x); this.attackTimer--; let distToDest=0; if(this.attackDest){ distToDest=Math.hypot(this.attackDest.x-this.x, this.attackDest.y-this.y); } if(this.attackTimer<=0 || !this.attackDest || distToDest<10){ const range=50+Math.random()*550, theta=Math.random()*Math.PI*2; this.attackDest={ x: target.x + Math.cos(theta)*range, y: target.y + Math.sin(theta)*range }; this.attackTimer=30+Math.random()*60; } const mAng=Math.atan2(this.attackDest.y-this.y, this.attackDest.x-this.x); this.x+=Math.cos(mAng)*this.speed; this.y+=Math.sin(mAng)*this.speed; if(this.ammo>0) this.tryShoot(); } behaviorSignal(target){ this.isSignaling=true; const dx=target.x-this.x, dy=target.y-this.y; const dist=Math.hypot(dx,dy); this.angle=Math.atan2(dy,dx); if(target.isSignaling){ if(dist>120){ this.x+=Math.cos(this.angle)*this.speed*0.6; this.y+=Math.sin(this.angle)*this.speed*0.6; } else if(dist<80){ this.x-=Math.cos(this.angle)*this.speed*0.6; this.y-=Math.sin(this.angle)*this.speed*0.6; } const t=Date.now()*0.0005; const sx=Math.cos(t), sy=Math.sin(t); this.x+=sx*this.speed*0.5; this.y+=sy*this.speed*0.5; } else { if(dist>150){ this.x+=Math.cos(this.angle)*this.speed*0.6; this.y+=Math.sin(this.angle)*this.speed*0.6; } } } behaviorFollow(enemyTarget){ const d=Math.hypot(player.x-this.x, player.y-this.y); if(d>100){ const a=Math.atan2(player.y-this.y, player.x-this.x); this.x+=Math.cos(a)*this.speed*1.3; this.y+=Math.sin(a)*this.speed*1.3; } if(enemyTarget && !isPeaceTime){ this.angle=Math.atan2(enemyTarget.y-this.y, enemyTarget.x-this.x); if(this.ammo>0) this.tryShoot(); } else{ this.angle=Math.atan2(player.y-this.y, player.x-this.x); } } tryShoot(){ if(this.aiType==='PACIFIST' && !(this.provoked || this.squad.members.length>1)) return; if(isPeaceTime) return; const now=Date.now(); if(now-this.lastShotTime>this.shootInterval){ let aiCanShoot=true; if(this.squad.members.includes(player)){ if(this.ammo%2!==0) aiCanShoot=false; } if(aiCanShoot && this.consumeAmmo()){ const velocity={x:Math.cos(this.angle)*9, y:Math.sin(this.angle)*9}; projectiles.push(new Projectile(this.x,this.y,4,'#ff5252',velocity,this.squad)); flashes.push(new MuzzleFlash(this.x,this.y)); this.lastShotTime=now; this.shootInterval=Math.random()*1000+500; playSound('shoot'); } } } draw(){ ctx.save(); ctx.translate(this.x,this.y); this.drawSignal(); this.drawHealth(ctx); this.drawAllianceBar(ctx); ctx.rotate(this.angle); ctx.beginPath(); ctx.arc(0,0,this.radius,0,Math.PI*2); ctx.fillStyle=(this.squad===player.squad)?'#00e676':this.baseColor; ctx.fill(); ctx.fillStyle='#555'; ctx.fillRect(-5,-5,10,10); ctx.fillStyle='#000'; ctx.fillRect(5,-2,12,4); ctx.restore(); } }
 
-    let trees=[], player, enemies=[], projectiles=[], particles=[], flashes=[];
+    let trees=[], player, enemies=[], projectiles=[], flashes=[];
     let aliveCount=0;
 
     function init(mode='survival'){
@@ -717,7 +1063,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function spawnTutorialFriend(){ const friend=new Enemy(player.x+300, player.y, 'PACIFIST'); friend.baseColor='#42a5f5'; enemies.push(friend); }
     function completeTutorial(){ tutorialState.step=3; updateTutorialUI(); }
     function initTrees(){ trees=[]; const count=(worldWidth*worldHeight)/30000; for(let i=0;i<count;i++){ trees.push(new Tree(Math.random()*worldWidth, Math.random()*worldHeight, Math.random()*30+20)); } }
-    function spawnInitialEnemies(){ enemyStatusBar.innerHTML=''; let types=[]; for(let i=0;i<gameConfig.aiCounts.AGGRESSOR;i++) types.push('AGGRESSOR'); for(let i=0;i<gameConfig.aiCounts.DECEIVER;i++) types.push('DECEIVER'); for(let i=0;i<gameConfig.aiCounts.PACIFIST;i++) types.push('PACIFIST'); for(let i=types.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [types[i],types[j]]=[types[j],types[i]]; } const totalAI=types.length; for(let i=0;i<totalAI;i++){ let x,y,dist,attempts=0; do{ x=Math.random()*(worldWidth-200)+100; y=Math.random()*(worldHeight-200)+100; dist=Math.hypot(x-player.x, y-player.y); attempts++; } while(dist<1000 && attempts<50); const enemy=new Enemy(x,y,types[i]); enemies.push(enemy); const icon=document.createElement('div'); icon.className='status-icon'; icon.style.backgroundColor=enemy.baseColor; icon.id='status-'+enemy.uid; enemyStatusBar.appendChild(icon); } }
+    function spawnInitialEnemies(){ 
+        // Only host spawns enemies in P2P mode
+        if (Network.mode === 'CLIENT') return;
+        
+        enemyStatusBar.innerHTML=''; let types=[]; for(let i=0;i<gameConfig.aiCounts.AGGRESSOR;i++) types.push('AGGRESSOR'); for(let i=0;i<gameConfig.aiCounts.DECEIVER;i++) types.push('DECEIVER'); for(let i=0;i<gameConfig.aiCounts.PACIFIST;i++) types.push('PACIFIST'); for(let i=types.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [types[i],types[j]]=[types[j],types[i]]; } const totalAI=types.length; for(let i=0;i<totalAI;i++){ let x,y,dist,attempts=0; do{ x=Math.random()*(worldWidth-200)+100; y=Math.random()*(worldHeight-200)+100; dist=Math.hypot(x-player.x, y-player.y); attempts++; } while(dist<1000 && attempts<50); const enemy=new Enemy(x,y,types[i]); enemies.push(enemy); const icon=document.createElement('div'); icon.className='status-icon'; icon.style.backgroundColor=enemy.baseColor; icon.id='status-'+enemy.uid; enemyStatusBar.appendChild(icon); } 
+    }
     function startPeaceTimer(){ peaceTimerEl.style.display='block'; peaceTimerEl.style.opacity=1; peaceTimerEl.style.color="#4caf50"; peaceTimerEl.style.borderColor="#4caf50"; peaceTimerEl.innerText = `和平时间: ${peaceTimeRemaining}s 后可以开枪`; peaceTimerEl.className=''; if(peaceIntervalId) clearInterval(peaceIntervalId); peaceIntervalId=setInterval(()=>{ if (isPaused) return; peaceTimeRemaining--; if(peaceTimeRemaining>0){ peaceTimerEl.innerText=`和平时间: ${peaceTimeRemaining}s 后可以开枪`; } else{ isPeaceTime=false; peaceTimerEl.innerText="开火许可已授权!"; peaceTimerEl.className='fire-allowed-anim'; clearInterval(peaceIntervalId); if(firstEchoTimeoutId){ clearTimeout(firstEchoTimeoutId); } firstEchoTimeoutId = setTimeout(()=>{ triggerCosmicEcho(); echoIntervalId = setInterval(triggerCosmicEcho, ECHO_INTERVAL); }, ECHO_FIRST_DELAY); } },1000); }
     function updateUI(){ ammoCountEl.innerText = player.ammo; ammoVisualsEl.innerHTML=''; for(let i=0;i<player.ammo;i++){ const d=document.createElement('div'); d.className='ammo-icon'; ammoVisualsEl.appendChild(d); } playerHealthUi.innerHTML=''; const maxH=player.maxHealth, curH=player.health; if(maxH > 20) { playerHealthUi.style.width = '200px'; playerHealthUi.innerHTML = `<div style="width:${(curH/maxH)*100}%; height:100%; background-color:#2e7d32; transition:width 0.3s;"></div>`; } else { playerHealthUi.style.width=(Math.min(maxH*30, 200))+'px'; for(let i=0;i<maxH;i++){ const div=document.createElement('div'); div.className='health-segment'+(i<curH?' active':''); playerHealthUi.appendChild(div); } } }
     function checkVictory(){ const hostile=enemies.filter(e=>e.squad!==player.squad).length; if(hostile===0){ gameWin(); } }
@@ -772,13 +1123,67 @@ document.addEventListener('DOMContentLoaded', () => {
 
         trees.forEach(t=>{ if(t.x>camera.x-50 && t.x<camera.x+canvas.width+50 && t.y>camera.y-50 && t.y<camera.y+canvas.height+50) t.draw(); });
 
+        // Draw Remote Players (P2P)
+        if(Network.mode !== 'OFFLINE') {
+            for(let id in Network.remotePlayers) {
+                const rp = Network.remotePlayers[id];
+                ctx.save();
+                ctx.translate(rp.x, rp.y);
+                
+                // Name tag
+                ctx.fillStyle = "#fff";
+                ctx.font = "10px sans-serif";
+                ctx.textAlign = "center";
+                ctx.fillText("联机玩家", 0, -25);
+
+                ctx.rotate(rp.angle);
+                // Vision Cone
+                ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,300,-0.35,0.35);
+                const gradient=ctx.createRadialGradient(0,0,0,0,0,300);
+                gradient.addColorStop(0,'rgba(3, 169, 244, 0.3)'); 
+                gradient.addColorStop(1,'rgba(3, 169, 244, 0)');
+                ctx.fillStyle=gradient; ctx.fill();
+                
+                // Body
+                ctx.beginPath(); ctx.arc(0,0,12,0,Math.PI*2);
+                ctx.fillStyle='#03a9f4'; 
+                ctx.fill();
+                ctx.strokeStyle='#01579b'; ctx.lineWidth=2; ctx.stroke();
+                
+                ctx.fillStyle='#111'; ctx.fillRect(5,-3,15,6);
+                ctx.restore();
+
+                if (rp.isSignaling) {
+                   ctx.save(); ctx.translate(rp.x, rp.y);
+                   ctx.beginPath();
+                   const ringRadius=12+25+Math.sin(Date.now()/150)*3;
+                   ctx.arc(0,0,ringRadius,0,Math.PI*2);
+                   ctx.strokeStyle='#00e676'; ctx.lineWidth=1.5; ctx.globalAlpha=0.3; ctx.stroke();
+                   ctx.restore();
+                }
+            }
+        }
+
         flashes.forEach((f,i)=>{ f.update(); f.draw(ctx); if(f.life<=0) flashes.splice(i,1); });
 
         const allUnits=[player, ...enemies];
         allUnits.forEach(u=>{ if(u.allianceTarget){ ctx.beginPath(); ctx.moveTo(u.x,u.y); ctx.lineTo(u.allianceTarget.x,u.allianceTarget.y); ctx.strokeStyle='#00e676'; ctx.lineWidth=(u.allianceProgress/3000)*10+1; ctx.stroke(); } });
 
-        player.update(enemies);
-        enemies.forEach(e=>e.update(allUnits));
+        // Host updates logic, Client just renders (mostly)
+        if (Network.mode !== 'CLIENT') {
+            player.update(enemies);
+            enemies.forEach(e=>e.update(allUnits));
+        } else {
+            // Client logic: Update player to send to host
+            player.update(enemies);
+            // Enemies are passive (synced from host), but we call update to draw them
+            enemies.forEach(e => {
+                // Override movement/logic, just draw. 
+                // But simple implementation: allow them to update animations/draw
+                // Ensure they don't move autonomously on client
+                e.draw(); 
+            });
+        }
 
         particles.forEach((p,i)=>{ p.update(); if(p.alpha<=0) particles.splice(i,1); });
 
@@ -787,58 +1192,89 @@ document.addEventListener('DOMContentLoaded', () => {
             if(p.x<0 || p.x>worldWidth || p.y<0 || p.y>worldHeight){ projectiles.splice(i,1); continue; }
             let hit=false;
 
-            if(gameMode==='tutorial' && tutorialState.step===1){
-                for(let unit of enemies){
-                    if(p.ownerSquad===unit.squad) continue;
-                    if(!unit.isTutorialTarget) continue;
-                    const dist=Math.hypot(p.x-unit.x, p.y-unit.y);
-                    if(dist<unit.radius+p.radius){
-                        unit.takeDamage(100);
-                        createExplosion(unit.x,unit.y,'#ffb74d',10); hit=true;
-                        if(unit.health<=0){
-                            const idx=enemies.indexOf(unit); if(idx>-1) enemies.splice(idx,1);
-                            refillEnergyFull(); 
-                            tutorialState.targetsHit++; updateTutorialUI();
-                            if(tutorialState.targetsHit>=tutorialState.targetsNeeded){ tutorialState.step=2; updateTutorialUI(); spawnTutorialFriend(); }
+            // Collision logic run by Host (or offline)
+            if (Network.mode !== 'CLIENT') {
+                if(gameMode==='tutorial' && tutorialState.step===1){
+                    for(let unit of enemies){
+                        if(p.ownerSquad===unit.squad) continue;
+                        if(!unit.isTutorialTarget) continue;
+                        const dist=Math.hypot(p.x-unit.x, p.y-unit.y);
+                        if(dist<unit.radius+p.radius){
+                            unit.takeDamage(100);
+                            createExplosion(unit.x,unit.y,'#ffb74d',10); hit=true;
+                            if(unit.health<=0){
+                                const idx=enemies.indexOf(unit); if(idx>-1) enemies.splice(idx,1);
+                                refillEnergyFull(); 
+                                tutorialState.targetsHit++; updateTutorialUI();
+                                if(tutorialState.targetsHit>=tutorialState.targetsNeeded){ tutorialState.step=2; updateTutorialUI(); spawnTutorialFriend(); }
+                            }
+                            break;
                         }
-                        break;
+                    }
+                } else if (gameMode === 'tutorial' && tutorialState.step === 2) {
+                    // BUG FIX: Friendly fire check in tutorial
+                    for(let unit of enemies){
+                         if(p.ownerSquad===unit.squad) continue;
+                         const dist=Math.hypot(p.x-unit.x, p.y-unit.y);
+                         if(dist<unit.radius+p.radius){
+                             createExplosion(unit.x,unit.y,'#f44336',10); hit=true;
+                             unit.health = 0;
+                             const idx=enemies.indexOf(unit); if(idx>-1) enemies.splice(idx,1);
+                             tutorialInstructionEl.innerHTML = "<span style='color:#ff5252'>错误：你杀死了盟友！</span><br>正在重新生成...";
+                             setTimeout(()=>{
+                                 if(gameMode==='tutorial' && tutorialState.step===2 && enemies.length === 0){
+                                     spawnTutorialFriend();
+                                     updateTutorialUI();
+                                 }
+                             }, 1500);
+                             break;
+                         }
+                    }
+                } else {
+                    const all=[player, ...enemies];
+                    for(let unit of all){
+                        if(p.ownerSquad===unit.squad) continue;
+                        const dist=Math.hypot(p.x-unit.x, p.y-unit.y);
+                        if(dist<unit.radius+p.radius){
+                            unit.takeDamage(1); createExplosion(unit.x,unit.y,'#f44336',10); hit=true;
+                            if(unit.health<=0){
+                                const killerIsPlayerSquad = p.ownerSquad && p.ownerSquad.members.includes(player);
+                                const killerIsDeceiver = p.ownerSquad.members.some(m=>m instanceof Enemy && m.aiType==='DECEIVER');
+                                if(killerIsDeceiver) statBetrayals++;
+                                if(unit===player){ gameOver(); }
+                                else{
+                                    unit.squad.members.forEach(m=>{
+                                        if(m===unit && m instanceof Enemy){
+                                            const icon=document.getElementById('status-'+m.uid);
+                                            if(icon) icon.classList.add('dead');
+                                            const eIdx=enemies.indexOf(m); if(eIdx>-1) enemies.splice(eIdx,1);
+                                            createExplosion(m.x,m.y,'#d32f2f',20); score+=100;
+                                            if(killerIsPlayerSquad){ refillEnergyFull(); }
+                                        }
+                                    });
+                                    if(gameMode==='survival'){ 
+                                        aliveCount=enemies.length+1; 
+                                        survivorEl.innerText=aliveCount; 
+                                        checkBroadcast(aliveCount); 
+                                        checkVictory(); 
+                                    }
+                                }
+                            }
+                            break;
+                        }
                     }
                 }
             } else {
-                const all=[player, ...enemies];
-                for(let unit of all){
+                // Client side collision: only visual explosions, assume host handles logic
+                 const all=[player, ...enemies];
+                 for(let unit of all){
                     if(p.ownerSquad===unit.squad) continue;
-                    const dist=Math.hypot(p.x-unit.x, p.y-unit.y);
-                    if(dist<unit.radius+p.radius){
-                        unit.takeDamage(1); createExplosion(unit.x,unit.y,'#f44336',10); hit=true;
-                        if(unit.health<=0){
-                            const killerIsPlayerSquad = p.ownerSquad && p.ownerSquad.members.includes(player);
-                            const killerIsDeceiver = p.ownerSquad.members.some(m=>m instanceof Enemy && m.aiType==='DECEIVER');
-                            if(killerIsDeceiver) statBetrayals++;
-                            if(unit===player){ gameOver(); }
-                            else{
-                                unit.squad.members.forEach(m=>{
-                                    if(m===unit && m instanceof Enemy){
-                                        const icon=document.getElementById('status-'+m.uid);
-                                        if(icon) icon.classList.add('dead');
-                                        const eIdx=enemies.indexOf(m); if(eIdx>-1) enemies.splice(eIdx,1);
-                                        createExplosion(m.x,m.y,'#d32f2f',20); score+=100;
-                                        if(killerIsPlayerSquad){ refillEnergyFull(); }
-                                    }
-                                });
-                                // === 关键逻辑：检测存活人数并触发广播 ===
-                                if(gameMode==='survival'){ 
-                                    aliveCount=enemies.length+1; 
-                                    survivorEl.innerText=aliveCount; 
-                                    checkBroadcast(aliveCount); // 检查是否触发广播
-                                    checkVictory(); 
-                                }
-                            }
-                        }
-                        break;
+                    if(Math.hypot(p.x-unit.x, p.y-unit.y) < unit.radius+p.radius){
+                        createExplosion(unit.x,unit.y,'#f44336',5); hit=true; break;
                     }
-                }
+                 }
             }
+
             if(hit) projectiles.splice(i,1);
         }
 
@@ -857,7 +1293,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function createExplosion(x,y,color,count){ for(let i=0;i<count;i++){ particles.push(new Particle(x,y,Math.random()*3,color,{x:(Math.random()-0.5)*8, y:(Math.random()-0.5)*8})); } }
     
-    // === 修改后的 renderMinimap 函数：新手教程强制显示敌人 ===
     function renderMinimap(){ 
         const w = minimapCanvas.width, h = minimapCanvas.height; 
         mmCtx.clearRect(0,0,w,h); 
@@ -880,17 +1315,44 @@ document.addEventListener('DOMContentLoaded', () => {
         enemies.forEach(e=>{ 
             const ex = e.x * sx, ey = e.y * sy; 
             const isAlly = (e.squad === player.squad); 
-            // 修改点：如果不在新手教程中，才执行“仅显示盟友”的限制
             if(gameMode !== 'tutorial' && alliesOnly && !isAlly) return; 
             
             mmCtx.fillStyle = isAlly ? '#00e676' : '#ff5252'; 
             mmCtx.beginPath(); mmCtx.arc(ex, ey, 2.6, 0, Math.PI*2); mmCtx.fill(); 
-        }); 
+        });
+
+        if(Network.mode !== 'OFFLINE') {
+             for(let id in Network.remotePlayers) {
+                const rp = Network.remotePlayers[id];
+                const rx = rp.x * sx, ry = rp.y * sy;
+                mmCtx.fillStyle = '#03a9f4'; 
+                mmCtx.beginPath(); mmCtx.arc(rx, ry, 3.0, 0, Math.PI*2); mmCtx.fill(); 
+             }
+        }
     }
 
     function triggerCosmicEcho(){ refillEnergyFull(); echoRevealActive = true; echoWaves.push({ radius:0, alpha:1 }); echoBanner.classList.add('show'); setTimeout(()=>echoBanner.classList.remove('show'), 1200); setTimeout(()=>{ echoRevealActive=false; }, 5000); playSound('echo'); }
     function updateEchoWaves(dt){ const maxRadius = Math.hypot(worldWidth, worldHeight); for(let i=echoWaves.length-1;i>=0;i--){ const wv = echoWaves[i]; wv.radius += ECHO_WAVE_SPEED * (dt/1000); wv.alpha -= ECHO_WAVE_FADE * (dt/1000); if(wv.radius>maxRadius || wv.alpha<=0){ echoWaves.splice(i,1); } } }
-    function updateEnergy(dt){ energyMs = Math.max(0, energyMs - dt); if (energyMs <= 0){ energyDepleteTimer += dt; while(energyDepleteTimer >= ENERGY_HEALTH_TICK_MS && player && player.health>0){ player.takeDamage(1); energyDepleteTimer -= ENERGY_HEALTH_TICK_MS; if(player.health<=0){ gameOver(); break; } } } else { energyDepleteTimer = 0; } }
+    
+    function updateEnergy(dt){ 
+        energyMs = Math.max(0, energyMs - dt); 
+        if (energyMs <= 0){ 
+            if (gameMode === 'tutorial') {
+                refillEnergyFull();
+                return;
+            }
+
+            energyDepleteTimer += dt; 
+            while(energyDepleteTimer >= ENERGY_HEALTH_TICK_MS && player && player.health>0){ 
+                player.takeDamage(1); 
+                energyDepleteTimer -= ENERGY_HEALTH_TICK_MS; 
+                if(player.health<=0){ gameOver(); break; } 
+            } 
+        } else { 
+            energyDepleteTimer = 0; 
+        } 
+    }
+    
     function refillEnergyFull(){ energyMs = energyMaxMs; energyDepleteTimer = 0; }
     function gainEnergyCapacityBonus(){ energyMaxMs += ENERGY_ALLIANCE_BONUS_MS; energyMs = energyMaxMs; energyDepleteTimer = 0; }
     function updateEnergyUI(){ const ratio = energyMaxMs>0 ? energyMs / energyMaxMs : 0; energyBarFill.style.width = `${Math.max(0, Math.min(ratio,1))*100}%`; energyText.innerText = `${(energyMs/1000).toFixed(1)}s / ${(energyMaxMs/1000).toFixed(1)}s`; const minRadius = ratio <= 0 ? 12 : 12; const clearRadius = Math.max(minRadius, ratio * 100); energyVignette.style.background = `radial-gradient(circle at 50% 50%, rgba(0,0,0,0) ${clearRadius}%, rgba(0,0,0,1) ${clearRadius+0.5}%)`; energyVignette.style.opacity = 1; }
@@ -901,16 +1363,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const signalBtn = document.getElementById('mobile-signal-btn');
     let rightStickFireTimer = null;
     
-    // === 关键：更智能的触摸设备检测 ===
-    // 只有当真正发生触摸事件时，才显示移动端控制器
-    // 这样可以防止触摸屏笔记本电脑误显示虚拟摇杆
     function showMobileControls() {
         if (mobileControls.style.display !== 'block') {
             mobileControls.style.display = 'block';
         }
     }
     
-    // 监听第一次触摸事件来决定是否显示控制器
     window.addEventListener('touchstart', function onFirstTouch() {
         showMobileControls();
         window.removeEventListener('touchstart', onFirstTouch);
