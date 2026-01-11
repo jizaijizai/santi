@@ -1,6 +1,6 @@
 <!-- 原作者B站 书与世Suis UID:13686871 提供了最原始的电脑端游玩模式代码 -->
 <!-- 二创 鸡仔 
-在原有基础上增加手机电脑双端游玩模式，上帝模式里的血条控制，设置及设置内所有内容，支持局域网联机，完善了新手教程 其他请访问https://jizaijizai.github.io    -->
+在原有基础上增加手机电脑双端游玩模式，上帝模式里的血条控制，设置及设置内所有内容，支持局域网联机，完善了新手教程，添加了音乐，添加了发送表情 其他请访问https://jizaijizai.github.io    -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -34,7 +34,7 @@
         
         canvas { display: block; }
 
-        /* === 修复核心：横屏强制提示 === */
+        /* === 横屏强制提示 === */
         #landscape-lock {
             display: none;
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -49,54 +49,39 @@
             #landscape-lock { display: flex; }
         }
 
-        /* 独立出来的设置按钮，层级最高，不随UI层隐藏 */
+        /* 设置按钮 */
         #settings-btn {
-            position: fixed; /* 使用 fixed 确保位置固定 */
-            top: max(15px, env(safe-area-inset-top)); 
-            right: max(15px, env(safe-area-inset-right));
-            width: 44px; height: 44px;
-            background: rgba(0,0,0,0.5);
-            border: 2px solid #fff; border-radius: 50%;
-            color: #fff; font-size: 22px;
+            position: fixed; top: max(15px, env(safe-area-inset-top)); right: max(15px, env(safe-area-inset-right));
+            width: 44px; height: 44px; background: rgba(0,0,0,0.5);
+            border: 2px solid #fff; border-radius: 50%; color: #fff; font-size: 22px;
             display: flex; align-items: center; justify-content: center;
-            cursor: pointer; pointer-events: auto; 
-            z-index: 2000; /* 确保在所有图层之上 */
-            transition: all 0.3s;
+            cursor: pointer; pointer-events: auto; z-index: 2000; transition: all 0.3s;
         }
         #settings-btn:hover { background: #fff; color: #000; transform: rotate(90deg); }
 
         #ui-layer {
-            position: absolute; top: 0; left: 0;
-            width: 100%; height: 100%;
-            pointer-events: none;
-            display: flex; flex-direction: column; justify-content: space-between;
-            z-index: 10;
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; display: flex; flex-direction: column; justify-content: space-between; z-index: 10;
         }
 
         #top-hud {
             width: 100%; display: flex; flex-direction: column; align-items: center;
-            padding-top: max(10px, env(safe-area-inset-top));
-            pointer-events: none;
+            padding-top: max(10px, env(safe-area-inset-top)); pointer-events: none;
         }
 
         #peace-timer {
             position: absolute; top: 15%; left: 50%; transform: translate(-50%, -50%);
-            font-size: clamp(16px, 4vw, 24px);
-            color: #4caf50; font-weight: bold;
-            text-shadow: 0 0 10px rgba(76, 175, 80, 0.5);
-            background-color: rgba(0,0,0,0.6);
+            font-size: clamp(16px, 4vw, 24px); color: #4caf50; font-weight: bold;
+            text-shadow: 0 0 10px rgba(76, 175, 80, 0.5); background-color: rgba(0,0,0,0.6);
             padding: 5px 15px; border-radius: 20px; border: 1px solid #4caf50;
             transition: opacity 0.5s; z-index: 50; white-space: nowrap;
         }
 
         #tutorial-instruction {
-            font-size: clamp(14px, 3.5vw, 20px);
-            color: #ffffff; font-weight: bold;
-            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
-            margin-top: 10px; background-color: rgba(0,0,0,0.8);
+            font-size: clamp(14px, 3.5vw, 20px); color: #ffffff; font-weight: bold;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5); margin-top: 10px; background-color: rgba(0,0,0,0.8);
             padding: 10px 15px; border-radius: 5px; border-left: 4px solid #4caf50;
-            transition: all 0.3s; display: none; text-align: center; white-space: pre-wrap;
-            max-width: 80%;
+            transition: all 0.3s; display: none; text-align: center; white-space: pre-wrap; max-width: 80%;
         }
         .instruction-complete { color: var(--color-primary) !important; border-color: var(--color-primary) !important; transform: scale(1.05); }
 
@@ -190,7 +175,7 @@
             padding-bottom: max(20px, env(safe-area-inset-bottom));
             box-sizing: border-box;
         }
-        #pause-menu { background: rgba(0,0,0,0.9); backdrop-filter: blur(8px); z-index: 2100; display: none; justify-content: center; } /* 提高z-index盖过所有 */
+        #pause-menu { background: rgba(0,0,0,0.9); backdrop-filter: blur(8px); z-index: 2100; display: none; justify-content: center; }
         
         .page-container {
             margin: auto; width: 100%;
@@ -301,6 +286,89 @@
         #mobile-signal-btn { position: absolute; bottom: max(140px, calc(env(safe-area-inset-bottom) + 110px)); right: max(25px, env(safe-area-inset-right)); width: 55px; height: 55px; background: rgba(0, 230, 118, 0.2); border: 2px solid #00e676; border-radius: 50%; pointer-events: auto; color: #00e676; font-size: 24px; display: flex; justify-content: center; align-items: center; box-shadow: 0 0 10px rgba(0, 230, 118, 0.3); }
         #mobile-signal-btn:active { background: rgba(0, 230, 118, 0.6); color: #fff; }
         @media (max-width: 667px) { .joystick-zone { width: 90px; height: 90px; } .joystick-knob { width: 35px; height: 35px; } #mobile-signal-btn { width: 45px; height: 45px; bottom: max(130px, calc(env(safe-area-inset-bottom) + 100px)); } }
+
+        /* === 优化后的表情栏样式 (视野修正) === */
+        #emoji-container {
+            position: absolute;
+            bottom: max(100px, calc(env(safe-area-inset-bottom) + 80px)); 
+            left: 50%; transform: translateX(-50%);
+            display: flex; flex-direction: column; align-items: center;
+            pointer-events: auto; z-index: 90;
+            opacity: 0.7; /* 默认半透明 */
+            transition: opacity 0.3s;
+        }
+        #emoji-container:hover, #emoji-container:active { opacity: 1; }
+        
+        #emoji-toggle-btn {
+            width: 44px; height: 44px; border-radius: 50%;
+            background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.4);
+            color: #fff; font-size: 22px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(4px); transition: all 0.2s;
+            margin: 0; padding: 0;
+        }
+        #emoji-toggle-btn:active { background: rgba(255, 255, 255, 0.2); transform: scale(0.95); }
+
+        #emoji-list {
+            display: flex; gap: 8px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 12px; border-radius: 30px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(8px);
+            margin-bottom: 10px;
+            transition: opacity 0.2s, transform 0.2s;
+            transform-origin: bottom center;
+        }
+        #emoji-list.hidden { display: none; opacity: 0; transform: scale(0.8); }
+        
+        .emoji-btn {
+            background: transparent; border: none; font-size: 24px;
+            cursor: pointer; padding: 4px; transition: transform 0.2s;
+            margin: 0; width: 36px; height: 36px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .emoji-btn:active { transform: scale(1.3); }
+
+        @media (max-width: 667px) {
+            #emoji-container { bottom: max(20px, calc(env(safe-area-inset-bottom) + 10px)); }
+            /* 手机端表情按钮略微变小，减少遮挡 */
+            #emoji-toggle-btn { width: 38px; height: 38px; font-size: 18px; }
+        }
+
+        /* === 桌面端悬浮音乐播放器 === */
+        #desktop-music-player {
+            position: fixed; bottom: 20px; left: 20px;
+            background: rgba(0,0,0,0.8); border: 1px solid #444; border-radius: 25px;
+            padding: 5px 15px; display: flex; align-items: center; gap: 10px;
+            color: #fff; z-index: 1500; backdrop-filter: blur(5px);
+            transition: all 0.3s ease;
+            box-shadow: 0 0 15px rgba(0,255,100,0.1);
+        }
+        /* 缩小状态：只保留图标，不挡摇杆 */
+        #desktop-music-player.collapsed {
+            width: 40px; height: 40px; padding: 0; justify-content: center;
+            border-radius: 50%; left: 20px; bottom: 80px; /* 避开左下角 */
+            overflow: hidden;
+        }
+        /* 移动端隐藏悬浮窗（控制在设置里） */
+        @media (max-width: 900px) {
+            #desktop-music-player { display: none !important; }
+        }
+
+        .music-icon { font-size: 20px; animation: spin 4s linear infinite; display: none; }
+        .playing .music-icon { display: block; }
+        .music-info { font-size: 12px; white-space: nowrap; overflow: hidden; max-width: 150px; text-overflow: ellipsis; }
+        .music-controls { display: flex; gap: 5px; }
+        .music-btn { background: none; border: none; color: #fff; cursor: pointer; font-size: 14px; padding: 2px 5px; }
+        .music-btn:hover { color: var(--color-primary); }
+        .collapse-btn { margin-left: 5px; cursor: pointer; font-size: 12px; color: #888; }
+        
+        #desktop-music-player.collapsed .music-info,
+        #desktop-music-player.collapsed .music-controls,
+        #desktop-music-player.collapsed .collapse-btn { display: none; }
+        #desktop-music-player.collapsed::after { content: '🎵'; font-size: 20px; }
+
+        @keyframes spin { 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body oncontextmenu="return false;">
@@ -311,6 +379,17 @@
     </div>
 
     <button id="settings-btn">⚙️</button>
+
+    <div id="desktop-music-player" class="collapsed">
+        <div class="music-icon">💿</div>
+        <div class="music-info" id="music-track-name">未播放</div>
+        <div class="music-controls">
+            <button class="music-btn" id="music-prev">⏮</button>
+            <button class="music-btn" id="music-playpause">▶</button>
+            <button class="music-btn" id="music-next">⏭</button>
+        </div>
+        <div class="collapse-btn" id="music-collapse">⇲</div>
+    </div>
 
     <div id="ui-layer" class="hidden">
         <div id="top-hud">
@@ -332,6 +411,20 @@
             <div class="energy-label">能源条（耗尽后，将会掉血） <span class="energy-text" id="energy-text">15.0s</span></div>
             <div class="energy-track"><div class="energy-fill" id="energy-bar-fill"></div></div>
         </div>
+        
+        <div id="emoji-container">
+            <div id="emoji-list" class="hidden">
+                <button class="emoji-btn" data-emoji="🏳️">🏳️</button>
+                <button class="emoji-btn" data-emoji="😂">😂</button>
+                <button class="emoji-btn" data-emoji="😡">😡</button>
+                <button class="emoji-btn" data-emoji="🤝">🤝</button>
+                <button class="emoji-btn" data-emoji="👻">👻</button>
+                <button class="emoji-btn" data-emoji="🤡">🤡</button>
+                <button class="emoji-btn" data-emoji="😆">😆</button>
+            </div>
+            <button id="emoji-toggle-btn">💬</button>
+        </div>
+
         <div id="minimap-wrapper"><div id="minimap-title">战场小地图</div><canvas id="minimap" width="220" height="220"></canvas></div>
         <div id="mobile-controls">
             <div id="stick-left" class="joystick-zone"><div class="joystick-knob"></div></div>
@@ -371,6 +464,8 @@
             <div class="settings-controls">
                 <div class="gm-row"><span class="gm-label">输入密语 (彩蛋)</span><input type="text" id="setting-secret" class="gm-input" style="width: 120px; text-transform: lowercase;" placeholder="____"></div>
                 <div class="gm-row"><span class="gm-label">声音效果</span><input type="checkbox" id="setting-sound" class="settings-checkbox" checked></div>
+                <div class="gm-row"><span class="gm-label">背景音乐</span><input type="checkbox" id="setting-music-toggle" class="settings-checkbox" checked></div>
+                
                 <div class="gm-row"><span class="gm-label">开启小地图</span><input type="checkbox" id="setting-minimap-toggle" class="settings-checkbox" checked></div>
                 <div class="gm-row"><span class="gm-label">小地图尺寸</span><input type="range" id="setting-minimap-size" class="settings-slider" min="0.5" max="1.5" step="0.1" value="1.0"></div>
             </div>
@@ -441,7 +536,13 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    document.addEventListener('touchmove', function(e) { if (!e.target.closest('#menu-overlay') && !e.target.closest('#pause-menu')) { e.preventDefault(); } }, { passive: false });
+    // 阻止默认触摸行为，除了特定的UI元素
+    document.addEventListener('touchmove', function(e) { 
+        if (!e.target.closest('#menu-overlay') && !e.target.closest('#pause-menu') && !e.target.closest('#emoji-container')) { 
+            e.preventDefault(); 
+        } 
+    }, { passive: false });
+    
     document.addEventListener('dblclick', function(event) { event.preventDefault(); }, { passive: false });
 
     function checkDesktopEnv() {
@@ -495,6 +596,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingSound = document.getElementById('setting-sound');
     const settingMinimapToggle = document.getElementById('setting-minimap-toggle');
     const settingMinimapSize = document.getElementById('setting-minimap-size');
+    const settingMusicToggle = document.getElementById('setting-music-toggle'); // 手机音乐开关
     const endTitle = document.getElementById('end-title');
     const finalScoreEl = document.getElementById('final-score');
     const statSignalEl = document.getElementById('stat-signal');
@@ -518,6 +620,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const hostIdInput = document.getElementById('host-id-input');
     const joinStatusMsg = document.getElementById('join-status-msg');
     const connectedCountEl = document.getElementById('connected-count');
+    const emojiToggleBtn = document.getElementById('emoji-toggle-btn');
+    const emojiList = document.getElementById('emoji-list');
+    const emojiBtns = document.querySelectorAll('.emoji-btn');
+
+    // 音乐系统相关 DOM
+    const musicWidget = document.getElementById('desktop-music-player');
+    const musicTrackName = document.getElementById('music-track-name');
+    const musicPlayBtn = document.getElementById('music-playpause');
+    const musicNextBtn = document.getElementById('music-next');
+    const musicPrevBtn = document.getElementById('music-prev');
+    const musicCollapseBtn = document.getElementById('music-collapse');
 
     let worldWidth, worldHeight;
     const camera = { x: 0, y: 0 };
@@ -544,10 +657,114 @@ document.addEventListener('DOMContentLoaded', () => {
     let tutorialState = { step: 0, movedDist: 0, targetsHit: 0, targetsNeeded: 3, startPos: null };
     let tutorialTargets = [];
 
-    // === P2P Network (PeerJS) ===
-    const ROOM_PREFIX = "df_game_v1_"; // 为了区分，加个前缀
+    // === 音乐系统逻辑 ===
+    const MusicSystem = {
+        // 在这里填写你的音乐文件名称，必须放在 ./music/ 目录下
+        playlist: [
+            'bgm1.mp3', 
+            'bgm2.mp3',
+            // 'bgm3.mp3' ...
+        ],
+        currentIndex: 0,
+        audio: new Audio(),
+        isPlaying: false,
+        enabled: true,
 
-    // 免费公共 STUN 服务器，提高连接成功率
+        init: function() {
+            if (this.playlist.length === 0) return;
+            this.audio.src = `music/${this.playlist[0]}`;
+            this.audio.loop = false;
+            this.audio.volume = 0.4;
+            
+            // 自动播放下一首
+            this.audio.addEventListener('ended', () => {
+                this.next();
+            });
+
+            // 绑定桌面端控件
+            musicPlayBtn.addEventListener('click', () => this.toggle());
+            musicNextBtn.addEventListener('click', () => this.next());
+            musicPrevBtn.addEventListener('click', () => this.prev());
+            musicCollapseBtn.addEventListener('click', () => {
+                musicWidget.classList.toggle('collapsed');
+                musicCollapseBtn.innerText = musicWidget.classList.contains('collapsed') ? '⇲' : '⇱';
+            });
+            // 桌面端点击折叠后的图标展开
+            musicWidget.addEventListener('click', (e) => {
+                if(musicWidget.classList.contains('collapsed')) {
+                    musicWidget.classList.remove('collapsed');
+                    musicCollapseBtn.innerText = '⇱';
+                }
+            });
+
+            // 绑定手机端设置开关
+            settingMusicToggle.addEventListener('change', (e) => {
+                this.enabled = e.target.checked;
+                if(this.enabled) {
+                    if(!this.isPlaying) this.play();
+                } else {
+                    this.pause();
+                }
+            });
+
+            this.updateUI();
+        },
+
+        play: function() {
+            if(!this.enabled) return;
+            // 处理浏览器自动播放策略：需要用户交互后才能播放
+            const playPromise = this.audio.play();
+            if (playPromise !== undefined) {
+                playPromise.then(_ => {
+                    this.isPlaying = true;
+                    this.updateUI();
+                }).catch(error => {
+                    console.log("Autoplay prevented, waiting for interaction");
+                });
+            }
+        },
+
+        pause: function() {
+            this.audio.pause();
+            this.isPlaying = false;
+            this.updateUI();
+        },
+
+        toggle: function() {
+            if(this.isPlaying) this.pause();
+            else this.play();
+        },
+
+        next: function() {
+            this.currentIndex = (this.currentIndex + 1) % this.playlist.length;
+            this.loadTrack();
+        },
+
+        prev: function() {
+            this.currentIndex = (this.currentIndex - 1 + this.playlist.length) % this.playlist.length;
+            this.loadTrack();
+        },
+
+        loadTrack: function() {
+            this.audio.src = `music/${this.playlist[this.currentIndex]}`;
+            if(this.enabled) this.play();
+            this.updateUI();
+        },
+
+        updateUI: function() {
+            musicTrackName.innerText = this.playlist[this.currentIndex];
+            musicPlayBtn.innerText = this.isPlaying ? '⏸' : '▶';
+            if(this.isPlaying) musicWidget.classList.add('playing');
+            else musicWidget.classList.remove('playing');
+        }
+    };
+
+    // 初始化音乐系统
+    MusicSystem.init();
+
+    // === P2P Network (PeerJS) ===
+    const ROOM_PREFIX = "df_game_v1_"; 
+
     const peerConfig = {
         debug: 1,
         config: {
@@ -560,23 +777,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const Network = {
         peer: null,
-        conn: null, // Client connection to host
-        connections: [], // Host connections to clients
-        mode: 'OFFLINE', // 'HOST', 'CLIENT', 'OFFLINE'
-        remotePlayers: {}, // { id: {x,y,angle,isSignaling,hp, lastUpdate} }
+        conn: null, 
+        connections: [], 
+        mode: 'OFFLINE', 
+        remotePlayers: {}, 
         roomCode: null,
         
         initHost: function() {
             if (this.peer) return;
-            
-            // 自动重试机制：防止生成的随机 ID 冲突
             const tryCreate = () => {
                 this.roomCode = Math.floor(100000 + Math.random() * 900000).toString();
                 const fullId = ROOM_PREFIX + this.roomCode;
-                
-                // 创建 Peer 对象
                 this.peer = new Peer(fullId, peerConfig); 
-                
                 this.peer.on('open', (id) => {
                     this.mode = 'HOST';
                     myRoomCodeDisplay.innerText = this.roomCode;
@@ -589,33 +801,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     joinStatusMsg.innerText = "房间创建成功，等待加入...";
                     joinStatusMsg.style.color = "#00e676";
                 });
-
                 this.peer.on('connection', (conn) => {
                     this.connections.push(conn);
                     connectedCountEl.innerText = this.connections.length;
-                    
-                    conn.on('open', () => {
-                        conn.send({ type: 'init', selfId: conn.peer });
-                    });
-                    
-                    conn.on('data', (data) => {
-                        this.handleData(data, conn.peer);
-                    });
-                    
+                    conn.on('open', () => { conn.send({ type: 'init', selfId: conn.peer }); });
+                    conn.on('data', (data) => { this.handleData(data, conn.peer); });
                     conn.on('close', () => {
                        this.connections = this.connections.filter(c => c !== conn);
                        delete this.remotePlayers[conn.peer];
                        connectedCountEl.innerText = this.connections.length;
                     });
                 });
-
                 this.peer.on('error', (err) => {
                     if (err.type === 'unavailable-id') {
-                        // 如果 ID 被占用，销毁旧对象并重试
-                        console.log("ID冲突，重试中...");
-                        this.peer.destroy();
-                        this.peer = null;
-                        setTimeout(tryCreate, 200); // 稍微延迟后重试
+                        this.peer.destroy(); this.peer = null; setTimeout(tryCreate, 200);
                     } else {
                         joinStatusMsg.innerText = "创建失败: " + err.type;
                         alert("创建房间失败，网络可能受限: " + err);
@@ -623,96 +822,85 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 });
             };
-
             tryCreate();
         },
         
         initClient: function(shortCode) {
             if (this.peer) return;
-            
-            this.peer = new Peer(null, peerConfig); // 客户端使用自动 ID
-            
+            this.peer = new Peer(null, peerConfig);
             this.peer.on('open', (id) => {
                 this.mode = 'CLIENT';
                 const hostFullId = ROOM_PREFIX + shortCode;
                 this.conn = this.peer.connect(hostFullId);
-                
-                joinStatusMsg.innerText = "正在连接...";
-                joinStatusMsg.style.color = "#ccc";
-                
+                joinStatusMsg.innerText = "正在连接..."; joinStatusMsg.style.color = "#ccc";
                 this.conn.on('open', () => {
-                    joinStatusMsg.innerText = "已连接到房主!";
-                    joinStatusMsg.style.color = "#00e676";
-                    hostGameBtn.disabled = true;
-                    joinGameBtn.disabled = true;
-                    hostIdInput.disabled = true;
+                    joinStatusMsg.innerText = "已连接到房主!"; joinStatusMsg.style.color = "#00e676";
+                    hostGameBtn.disabled = true; joinGameBtn.disabled = true; hostIdInput.disabled = true;
                     onlineStatusEl.innerHTML = `P2P在线 <span class='online-role'>加入者</span>`;
                     onlineStatusEl.classList.add('online-active');
                 });
-                
-                this.conn.on('data', (data) => {
-                    this.handleData(data);
-                });
-                
-                this.conn.on('error', (err) => {
-                    joinStatusMsg.innerText = "连接中断";
-                });
-                
-                this.conn.on('close', () => {
-                    alert("与房主断开连接");
-                    location.reload();
-                });
+                this.conn.on('data', (data) => { this.handleData(data); });
+                this.conn.on('error', (err) => { joinStatusMsg.innerText = "连接中断"; });
+                this.conn.on('close', () => { alert("与房主断开连接"); location.reload(); });
             });
-
             this.peer.on('error', (err) => {
-                joinStatusMsg.innerText = "连接失败: 房间可能不存在";
-                joinStatusMsg.style.color = "#ff5252";
-                this.peer = null;
+                joinStatusMsg.innerText = "连接失败: 房间可能不存在"; joinStatusMsg.style.color = "#ff5252"; this.peer = null;
             });
         },
 
         handleData: function(data, senderId) {
             if (this.mode === 'HOST') {
-                // Host logic: Receive updates from clients
                 if (data.type === 'clientUpdate') {
-                    this.remotePlayers[senderId] = data.player;
+                    if(!this.remotePlayers[senderId]) this.remotePlayers[senderId] = {};
+                    Object.assign(this.remotePlayers[senderId], data.player);
                     this.remotePlayers[senderId].lastUpdate = Date.now();
                 } else if (data.type === 'shoot') {
-                    // Broadcast shoot to others
                     const vel = {x: Math.cos(data.angle)*12, y: Math.sin(data.angle)*12};
                     projectiles.push(new Projectile(data.x, data.y, 4, '#03a9f4', vel, null)); 
                     flashes.push(new MuzzleFlash(data.x, data.y));
                     playSound('shoot');
                     this.broadcast({ type: 'remoteShoot', id: senderId, x: data.x, y: data.y, angle: data.angle }, senderId);
+                } else if (data.type === 'emoji') {
+                    // Update host's record of this player to include emoji state
+                    if(this.remotePlayers[senderId]) {
+                        this.remotePlayers[senderId].currentEmoji = data.emoji;
+                        this.remotePlayers[senderId].emojiTimer = 120;
+                    }
+                    this.broadcast({ type: 'emoji', id: senderId, emoji: data.emoji }, senderId);
                 }
             } else if (this.mode === 'CLIENT') {
-                // Client logic: Receive world state from host
                 if (data.type === 'worldUpdate') {
-                    // Update remote players
                     const players = data.players;
                     for (let id in players) {
                         if (id !== this.peer.id) {
+                            // Preserve local emoji animation state if server sends update
+                            const oldEmoji = this.remotePlayers[id] ? this.remotePlayers[id].currentEmoji : null;
+                            const oldTimer = this.remotePlayers[id] ? this.remotePlayers[id].emojiTimer : 0;
+                            
                             this.remotePlayers[id] = players[id];
+                            
+                            // If server packet doesn't have emoji data (e.g. slight lag), keep local animation going
+                            if(oldTimer > 0 && (!players[id].emojiTimer || players[id].emojiTimer <= 0)) {
+                                this.remotePlayers[id].currentEmoji = oldEmoji;
+                                this.remotePlayers[id].emojiTimer = oldTimer;
+                            }
                         }
                     }
-                    // Update enemies (Force sync from host)
-                    if (data.enemies) {
-                        this.syncEnemies(data.enemies);
-                    }
+                    if (data.enemies) this.syncEnemies(data.enemies);
                 } else if (data.type === 'remoteShoot') {
                     const vel = {x: Math.cos(data.angle)*12, y: Math.sin(data.angle)*12};
                     projectiles.push(new Projectile(data.x, data.y, 4, '#03a9f4', vel, null)); 
                     flashes.push(new MuzzleFlash(data.x, data.y));
                     playSound('shoot');
                 } else if (data.type === 'gameStart') {
-                    // Host started game
                     menuOverlay.classList.add('hidden'); 
-                    // Close settings if open
                     if (isPaused) togglePause(); 
-                    
-                    gameRunning = true; 
-                    init('survival'); // Re-init but keep P2P
-                    animate();
+                    gameRunning = true; init('survival'); animate();
+                } else if (data.type === 'emoji') {
+                    if (this.remotePlayers[data.id]) {
+                        this.remotePlayers[data.id].currentEmoji = data.emoji;
+                        this.remotePlayers[data.id].emojiTimer = 120;
+                    }
                 }
             }
         },
@@ -731,18 +919,13 @@ document.addEventListener('DOMContentLoaded', () => {
                          const icon=document.createElement('div'); icon.className='status-icon'; icon.style.backgroundColor=he.baseColor; icon.id='status-'+he.uid; enemyStatusBar.appendChild(icon);
                     }
                 }
-                local.x = he.x;
-                local.y = he.y;
-                local.angle = he.angle;
-                local.health = he.hp;
-                local.isSignaling = he.isSig;
-                local.squad.color = he.sqColor; 
+                local.x = he.x; local.y = he.y; local.angle = he.angle; local.health = he.hp;
+                local.isSignaling = he.isSig; local.squad.color = he.sqColor; 
                 if(local.health <= 0) {
                      const icon=document.getElementById('status-'+local.uid);
                      if(icon) icon.classList.add('dead');
                 }
             });
-            
             for(let i = enemies.length - 1; i >= 0; i--) {
                 if(!validIds.has(enemies[i].uid)) {
                     const icon=document.getElementById('status-'+enemies[i].uid);
@@ -765,28 +948,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 this.conn.send({
                     type: 'clientUpdate',
                     player: {
-                        x: Math.round(player.x),
-                        y: Math.round(player.y),
-                        angle: player.angle,
-                        isSignaling: player.isSignaling,
-                        hp: player.health
+                        x: Math.round(player.x), y: Math.round(player.y), angle: player.angle,
+                        isSignaling: player.isSignaling, hp: player.health,
+                        currentEmoji: player.currentEmoji, emojiTimer: player.emojiTimer // Send Emoji State
                     }
                 });
             } else if (this.mode === 'HOST') {
                 const allPlayers = { ...this.remotePlayers };
                 allPlayers[this.peer.id] = {
-                    x: Math.round(player.x), y: Math.round(player.y), angle: player.angle, isSignaling: player.isSignaling, hp: player.health
+                    x: Math.round(player.x), y: Math.round(player.y), angle: player.angle,
+                    isSignaling: player.isSignaling, hp: player.health,
+                    currentEmoji: player.currentEmoji, emojiTimer: player.emojiTimer // Send Emoji State
                 };
                 const enemyData = enemies.map(e => ({
                     uid: e.uid, x: Math.round(e.x), y: Math.round(e.y), angle: e.angle, hp: e.health, 
                     isSig: e.isSignaling, aiType: e.aiType, baseColor: e.baseColor, sqColor: e.squad.color
                 }));
-
-                this.broadcast({
-                    type: 'worldUpdate',
-                    players: allPlayers,
-                    enemies: enemyData
-                });
+                this.broadcast({ type: 'worldUpdate', players: allPlayers, enemies: enemyData });
             }
         },
         
@@ -795,6 +973,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 this.conn.send({ type: 'shoot', x: player.x, y: player.y, angle: angle });
             } else if (this.mode === 'HOST') {
                 this.broadcast({ type: 'remoteShoot', id: this.peer.id, x: player.x, y: player.y, angle: angle });
+            }
+        },
+
+        sendEmoji: function(emoji) {
+            if (this.mode === 'CLIENT' && this.conn && this.conn.open) {
+                this.conn.send({ type: 'emoji', emoji: emoji });
+            } else if (this.mode === 'HOST') {
+                this.broadcast({ type: 'emoji', id: this.peer.id, emoji: emoji });
             }
         },
         
@@ -815,6 +1001,56 @@ document.addEventListener('DOMContentLoaded', () => {
         if(Network.mode === 'HOST') {
             navigator.clipboard.writeText(myRoomCodeDisplay.innerText);
             alert("房间号已复制");
+        }
+    });
+
+    // === 表情功能逻辑 ===
+    // 切换表情列表显示
+    function toggleEmojiList(show) {
+        if(show === undefined) {
+            emojiList.classList.toggle('hidden');
+        } else {
+            if(show) emojiList.classList.remove('hidden');
+            else emojiList.classList.add('hidden');
+        }
+    }
+
+    // 绑定切换按钮
+    emojiToggleBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault(); e.stopPropagation();
+        toggleEmojiList();
+    }, {passive: false});
+    emojiToggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleEmojiList();
+    });
+
+    // 绑定具体表情按钮
+    emojiBtns.forEach(btn => {
+        const sendAction = (e) => {
+            e.preventDefault(); e.stopPropagation();
+            if(!gameRunning || isPaused) return;
+            
+            const emoji = btn.dataset.emoji;
+            if(player) {
+                player.showEmoji(emoji, 120);
+                Network.sendEmoji(emoji);
+                toggleEmojiList(false); // 发送后收起
+            }
+        };
+        btn.addEventListener('touchstart', sendAction, {passive: false});
+        btn.addEventListener('click', sendAction);
+    });
+
+    // 点击其他区域关闭表情列表
+    document.addEventListener('touchstart', (e) => {
+        if(!e.target.closest('#emoji-container')) {
+            toggleEmojiList(false);
+        }
+    });
+    document.addEventListener('click', (e) => {
+        if(!e.target.closest('#emoji-container')) {
+            toggleEmojiList(false);
         }
     });
 
@@ -933,23 +1169,34 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('keyup', (e) => { const k = e.key.toLowerCase(); if (keys.hasOwnProperty(k)) keys[k] = false; });
+    
+    // === 核心射击逻辑封装 ===
+    function performShoot() {
+        if (!gameRunning || isPaused) return;
+        if (gameMode === 'survival' && isPeaceTime) return;
+        
+        // 使用当前鼠标位置（或摇杆计算出的虚拟鼠标位置）计算角度
+        const worldMouseX = mouse.x + camera.x;
+        const worldMouseY = mouse.y + camera.y;
+        const angle = Math.atan2(worldMouseY - player.y, worldMouseX - player.x);
+        
+        if (player.consumeAmmo()) {
+            const vel = {x: Math.cos(angle)*12, y: Math.sin(angle)*12};
+            projectiles.push(new Projectile(player.x, player.y, 4, '#ffd54f', vel, player.squad));
+            flashes.push(new MuzzleFlash(player.x, player.y));
+            playSound('shoot');
+            Network.sendShoot(player, angle);
+        }
+    }
+
     window.onmousedown = (e) => {
         if (e.target === settingsBtn || isPaused) return;
         if (e.target === hostIdInput) return; 
+        if (e.target.closest('#emoji-container')) return; // Ignore clicks on emoji UI
+        if (e.target.closest('#desktop-music-player')) return; // Ignore music player clicks
         if (onTitleScreen && !pageTitle.classList.contains('hidden')) { goToNextPage(); } 
         else if (e.button === 2) {
-            if (!gameRunning || isPaused) return;
-            if (gameMode === 'survival' && isPeaceTime) return;
-            if (player.consumeAmmo()) {
-                const worldMouseX = mouse.x + camera.x;
-                const worldMouseY = mouse.y + camera.y;
-                const angle = Math.atan2(worldMouseY - player.y, worldMouseX - player.x);
-                const vel = {x: Math.cos(angle)*12, y: Math.sin(angle)*12};
-                projectiles.push(new Projectile(player.x, player.y, 4, '#ffd54f', vel, player.squad));
-                flashes.push(new MuzzleFlash(player.x, player.y));
-                playSound('shoot');
-                Network.sendShoot(player, angle);
-            }
+            performShoot(); // 使用封装的射击函数
         } else if (e.button === 0) {
             if (e.target.closest('.p2p-panel')) return;
             if (!gameRunning || isPaused) return;
@@ -972,8 +1219,10 @@ document.addEventListener('DOMContentLoaded', () => {
         menuOverlay.classList.add('hidden'); 
         gameRunning = true; 
         animate(); 
+        // 游戏开始时尝试播放音乐
+        if(MusicSystem.enabled) MusicSystem.play();
     });
-    tutorialBtn.addEventListener('click', () => { init('tutorial'); menuOverlay.classList.add('hidden'); gameRunning = true; animate(); });
+    tutorialBtn.addEventListener('click', () => { init('tutorial'); menuOverlay.classList.add('hidden'); gameRunning = true; animate(); if(MusicSystem.enabled) MusicSystem.play(); });
     skipTutorialBtn.addEventListener('click', () => { isTutorialCompleted = true; updateControlsPage(); });
     restartBtn.addEventListener('click', () => { menuOverlay.classList.remove('hidden'); pageGameOver.classList.add('hidden'); pageTitle.classList.add('hidden'); pageRules.classList.add('hidden'); pageGodMode.classList.add('hidden'); pageControls.classList.remove('hidden'); updateControlsPage(); });
     startGodBtn.addEventListener('click', () => {
@@ -984,6 +1233,7 @@ document.addEventListener('DOMContentLoaded', () => {
         gameConfig.initialHp = parseInt(gmPlayerHp.value) || 4;
         Network.notifyGameStart();
         init('survival'); menuOverlay.classList.add('hidden'); gameRunning = true; animate();
+        if(MusicSystem.enabled) MusicSystem.play();
     });
 
     function playSound(type) { if (!soundEnabled) return; }
@@ -1160,6 +1410,20 @@ document.addEventListener('DOMContentLoaded', () => {
                    ctx.arc(0,0,ringRadius,0,Math.PI*2);
                    ctx.strokeStyle='#00e676'; ctx.lineWidth=1.5; ctx.globalAlpha=0.3; ctx.stroke();
                    ctx.restore();
+                }
+
+                // Render remote emoji
+                if (rp.emojiTimer > 0) {
+                    rp.emojiTimer--;
+                    ctx.save(); 
+                    ctx.translate(rp.x, rp.y);
+                    ctx.globalAlpha=1; 
+                    ctx.font="30px sans-serif"; 
+                    ctx.textAlign="center"; 
+                    ctx.textBaseline="middle"; 
+                    const floatY=Math.sin(Date.now()/100)*5; 
+                    ctx.fillText(rp.currentEmoji, 0, -12-60+floatY); // 12 is radius, -60 matches local
+                    ctx.restore();
                 }
             }
         }
@@ -1388,7 +1652,10 @@ document.addEventListener('DOMContentLoaded', () => {
     stickRight.addEventListener('touchend', () => { resetJoystick(stickRight); if(rightStickFireTimer) { clearInterval(rightStickFireTimer); rightStickFireTimer = null; } });
     function handleAim(e) { const touch = e.targetTouches[0]; handleJoystick(touch, stickRight, (x, y, strength, angle) => { const centerOffsetX = Math.cos(angle) * 200; const centerOffsetY = Math.sin(angle) * 200; mouse.x = (canvas.width / 2) + centerOffsetX; mouse.y = (canvas.height / 2) + centerOffsetY; if (strength > 0.9) { if (!rightStickFireTimer) { tryMobileShoot(); rightStickFireTimer = setInterval(tryMobileShoot, 300); } } else { if (rightStickFireTimer) { clearInterval(rightStickFireTimer); rightStickFireTimer = null; } } }); }
     
-    function tryMobileShoot() { if(isPaused) return; const event = new MouseEvent('mousedown', { 'view': window, 'bubbles': true, 'cancelable': true, 'button': 2 }); window.dispatchEvent(event); }
+    function tryMobileShoot() { 
+        if(isPaused) return; 
+        performShoot(); // 直接调用射击函数，不使用鼠标模拟
+    }
     
     signalBtn.addEventListener('touchstart', (e) => { if(isPaused) return; e.preventDefault(); isSignalDown = true; signalBtn.style.background = "rgba(0, 230, 118, 0.6)"; signalBtn.style.color = "#fff"; if (onTitleScreen) goToNextPage(); });
     signalBtn.addEventListener('touchend', (e) => { e.preventDefault(); isSignalDown = false; signalBtn.style.background = "rgba(0, 230, 118, 0.2)"; signalBtn.style.color = "#00e676"; });
